@@ -31,3 +31,13 @@ Perform a controlled Expo upgrade, then verify dependency
 compatibility, TypeScript, security findings, and Android execution.
 
 This checkpoint is not approved for production release.
+
+## SDK 55 intermediate checkpoint
+
+- Updated Expo and aligned related dependencies for SDK 55.
+- Removed obsolete newArchEnabled and android.edgeToEdgeEnabled settings.
+- Expo Doctor: 20/20 checks passed.
+- TypeScript: passed with no errors.
+- Final installation audit summary: 9 moderate vulnerabilities remain.
+- Android execution has not yet been tested.
+- Security remediation is not complete.

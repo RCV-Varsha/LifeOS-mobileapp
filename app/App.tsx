@@ -1,20 +1,20 @@
+import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
-
+import GoalsScreen from './src/screens/GoalsScreen';
+import GoalOnboardingScreen from './src/screens/GoalOnboardingScreen';
 export default function App() {
+  const [screen, setScreen] = useState<'goals' | 'addGoal'>('goals');
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
+    <>
+        {screen === 'goals' ? (
+        <GoalsScreen onAddGoal={() => setScreen('addGoal')} />
+      ) : (
+        <GoalOnboardingScreen
+          onSaved={() => setScreen('goals')}
+          onCancel={() => setScreen('goals')}
+        />
+      )}
       <StatusBar style="auto" />
-    </View>
+    </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
