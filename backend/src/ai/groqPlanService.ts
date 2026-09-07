@@ -10,6 +10,21 @@ type GoalContext = {
   minutesPerDay: number;
 };
 
+export class GroqRequestError extends Error {
+  readonly status: number;
+  readonly retryAfterSeconds: number | null;
+
+  constructor(
+    status: number,
+    retryAfterSeconds: number | null,
+  ) {
+    super(`Groq request failed with HTTP ${status}`);
+    this.name = 'GroqRequestError';
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -80,12 +95,12 @@ Do not claim anything has been saved, scheduled, or accepted.
   );
 
   if (!response.ok) {
-    throw Object.assign(
-      new Error(`Groq request failed with HTTP ${response.status}`),
-      {
-        name: 'GroqRequestError',
-        status: response.status,
-      },
+    const retryAfter = response.headers.get('retry-after');
+    const parsedRetryAfter = retryAfter === null ? Number.NaN : Number(retryAfter);
+
+    throw new GroqRequestError(
+      response.status,
+      Number.isFinite(parsedRetryAfter) ? Math.ceil(parsedRetryAfter) : null,
     );
   }
 

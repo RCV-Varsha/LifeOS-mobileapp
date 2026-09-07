@@ -1,7 +1,8 @@
+import { API_URL } from '../config/api';
 export async function checkBackendHealth(): Promise<void> {
   const controller = new AbortController();
+  const HEALTH_URL = `${API_URL}/health`;
   const timeout = setTimeout(() => controller.abort(), 5000);
-    const HEALTH_URL = "http://192.168.2.103:3000/health";
   try {
     const response = await fetch(HEALTH_URL, {
       signal: controller.signal,

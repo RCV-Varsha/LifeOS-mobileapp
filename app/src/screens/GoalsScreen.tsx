@@ -4,9 +4,10 @@ import { getGoals, type GoalSummary } from '../services/goalService';
 
 type GoalsScreenProps = {
   onAddGoal: () => void;
+  onOpenGoal: (goalId: string) => void;
 };
 
-export default function GoalsScreen({ onAddGoal }: GoalsScreenProps) {
+export default function GoalsScreen({ onAddGoal, onOpenGoal }: GoalsScreenProps) {
   const [goals, setGoals] = useState<GoalSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -62,6 +63,9 @@ export default function GoalsScreen({ onAddGoal }: GoalsScreenProps) {
             <View style={styles.card}>
               <Text style={styles.title}>{item.goal}</Text>
               <Text>{item.minutesPerDay} minutes per day</Text>
+              <View style={styles.cardAction}>
+                <Button title="View plan" onPress={() => onOpenGoal(item.id)} />
+              </View>
             </View>
           )}
         />
@@ -96,5 +100,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   title: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  cardAction: { marginTop: 12, alignItems: 'flex-start' },
   error: { color: '#b00020', marginBottom: 16 },
 });

@@ -1,0 +1,318 @@
+import { Router } from 'express';
+import { pool } from './db.ts';
+import {
+  generateProposedPlan,
+  GroqRequestError,
+} from './ai/groqPlanService.ts';
+import {
+  validateProposedPlan,
+  type ProposedPlan,
+} from './ai/planSchema.ts';
+
+export const goalPlanRouter = Router();
+
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type SavedGoalPlan = {
+  id: string;
+  goalId: string;
+  goalTitle: string;
+  goalReason: string;
+  minutesPerDay: number;
+  plan: ProposedPlan;
+  provider: string;
+  model: string;
+  status: 'proposed' | 'accepted';
+  generatedAt: Date;
+  acceptedAt: Date | null;
+};
+
+const planGenerations = new Map<string, Promise<SavedGoalPlan>>();
+
+goalPlanRouter.post('/:goalId/plan', async (req, res) => {
+  const goalId = req.params.goalId;
+
+  if (typeof goalId !== 'string' || !uuidPattern.test(goalId)) {
+    res.status(400).json({ error: 'Invalid goal ID.' });
+    return;
+  }
+
+  try {
+    const goalResult = await pool.query<{
+      id: string;
+      goal: string;
+      reason: string;
+      minutesPerDay: number;
+    }>(
+      `SELECT id,
+              title AS goal,
+              reason,
+              minutes_per_day AS "minutesPerDay"
+       FROM public.goals
+       WHERE id = $1`,
+      [goalId],
+    );
+
+    const goal = goalResult.rows[0];
+
+    if (!goal) {
+      res.status(404).json({ error: 'Goal not found.' });
+      return;
+    }
+
+    const existingPlan = await pool.query<{
+      id: string;
+      goalId: string;
+      goalTitle: string;
+      goalReason: string;
+      minutesPerDay: number;
+      plan: unknown;
+      provider: string;
+      model: string;
+      status: 'proposed' | 'accepted';
+      generatedAt: Date;
+      acceptedAt: Date | null;
+    }>(
+      `SELECT id,
+              goal_id AS "goalId",
+              goal_title AS "goalTitle",
+              goal_reason AS "goalReason",
+              minutes_per_day AS "minutesPerDay",
+              plan,
+              provider,
+              model,
+              status,
+              generated_at AS "generatedAt",
+              accepted_at AS "acceptedAt"
+       FROM public.goal_plans
+       WHERE goal_id = $1`,
+      [goalId],
+    );
+
+    const storedPlan = existingPlan.rows[0];
+
+    if (storedPlan) {
+      const validatedPlan = validateProposedPlan(
+        storedPlan.plan,
+        storedPlan.minutesPerDay,
+      );
+
+      res.set('Cache-Control', 'no-store');
+      res.status(200).json({
+        goalPlan: {
+          ...storedPlan,
+          plan: validatedPlan,
+        },
+      });
+      return;
+    }
+
+    const model = process.env.GROQ_MODEL;
+
+    if (!process.env.GROQ_API_KEY || !model) {
+      console.error('Groq configuration is missing.');
+      res.status(503).json({
+        error: 'AI service is not configured.',
+        code: 'ai_not_configured',
+      });
+      return;
+    }
+
+    let generation = planGenerations.get(goalId);
+    const startedGeneration = generation === undefined;
+
+    if (!generation) {
+      generation = (async () => {
+        const plan = await generateProposedPlan({
+          goal: goal.goal,
+          reason: goal.reason,
+          minutesPerDay: goal.minutesPerDay,
+        });
+
+        const savedResult = await pool.query<SavedGoalPlan>(
+          `INSERT INTO public.goal_plans (
+             goal_id,
+             goal_title,
+             goal_reason,
+             minutes_per_day,
+             plan,
+             provider,
+             model
+           )
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+           RETURNING id,
+                     goal_id AS "goalId",
+                     goal_title AS "goalTitle",
+                     goal_reason AS "goalReason",
+                     minutes_per_day AS "minutesPerDay",
+                     plan,
+                     provider,
+                     model,
+                     status,
+                     generated_at AS "generatedAt",
+                     accepted_at AS "acceptedAt"`,
+          [
+            goal.id,
+            goal.goal,
+            goal.reason,
+            goal.minutesPerDay,
+            JSON.stringify(plan),
+            'groq',
+            model,
+          ],
+        );
+
+        return savedResult.rows[0];
+      })();
+
+      planGenerations.set(goalId, generation);
+    }
+
+    try {
+      const savedPlan = await generation;
+      res.status(startedGeneration ? 201 : 200).json({ goalPlan: savedPlan });
+    } finally {
+      if (planGenerations.get(goalId) === generation) {
+        planGenerations.delete(goalId);
+      }
+    }
+  } catch (error) {
+    console.error(
+      'Goal plan generation failed:',
+      error instanceof Error ? error.name : 'Unknown error',
+    );
+
+    if (error instanceof GroqRequestError && error.status === 429) {
+      res.status(429).json({
+        error: 'AI request limit reached. Please try again shortly.',
+        code: 'ai_rate_limited',
+        retryAfterSeconds: error.retryAfterSeconds,
+      });
+      return;
+    }
+
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      res.status(504).json({
+        error: 'AI plan generation timed out. Please try again.',
+        code: 'ai_timeout',
+      });
+      return;
+    }
+
+    res.status(502).json({
+      error: 'The AI service could not generate a valid plan.',
+      code: 'ai_unavailable',
+    });
+  }
+});
+
+goalPlanRouter.get('/:goalId/plan', async (req, res) => {
+  const goalId = req.params.goalId;
+
+  if (typeof goalId !== 'string' || !uuidPattern.test(goalId)) {
+    res.status(400).json({ error: 'Invalid goal ID.' });
+    return;
+  }
+
+  try {
+    const result = await pool.query<{
+      id: string;
+      goalId: string;
+      goalTitle: string;
+      goalReason: string;
+      minutesPerDay: number;
+      plan: unknown;
+      provider: string;
+      model: string;
+      status: 'proposed' | 'accepted';
+      generatedAt: Date;
+      acceptedAt: Date | null;
+    }>(
+      `SELECT id,
+              goal_id AS "goalId",
+              goal_title AS "goalTitle",
+              goal_reason AS "goalReason",
+              minutes_per_day AS "minutesPerDay",
+              plan,
+              provider,
+              model,
+              status,
+              generated_at AS "generatedAt",
+              accepted_at AS "acceptedAt"
+       FROM public.goal_plans
+       WHERE goal_id = $1`,
+      [goalId],
+    );
+
+    const storedPlan = result.rows[0];
+
+    if (!storedPlan) {
+      res.status(404).json({
+        error: 'This goal does not have a plan.',
+      });
+      return;
+    }
+
+    const validatedPlan = validateProposedPlan(
+      storedPlan.plan,
+      storedPlan.minutesPerDay,
+    );
+
+    const goalPlan: Omit<typeof storedPlan, 'plan'> & {
+      plan: ProposedPlan;
+    } = {
+      ...storedPlan,
+      plan: validatedPlan,
+    };
+
+    res.set('Cache-Control', 'no-store');
+    res.status(200).json({ goalPlan });
+  } catch {
+    console.error('Stored goal plan could not be loaded.');
+
+    res.status(500).json({
+      error: 'Could not load the goal plan.',
+    });
+  }
+});
+
+goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
+  const goalId = req.params.goalId;
+
+  if (typeof goalId !== 'string' || !uuidPattern.test(goalId)) {
+    res.status(400).json({ error: 'Invalid goal ID.' });
+    return;
+  }
+
+  try {
+    const result = await pool.query<{
+      id: string;
+      goalId: string;
+      status: 'accepted';
+      acceptedAt: Date;
+    }>(
+      `UPDATE public.goal_plans
+       SET status = 'accepted',
+           accepted_at = COALESCE(accepted_at, CURRENT_TIMESTAMP)
+       WHERE goal_id = $1
+       RETURNING id,
+                 goal_id AS "goalId",
+                 status,
+                 accepted_at AS "acceptedAt"`,
+      [goalId],
+    );
+
+    const acceptedPlan = result.rows[0];
+
+    if (!acceptedPlan) {
+      res.status(404).json({ error: 'This goal does not have a plan.' });
+      return;
+    }
+
+    res.status(200).json({ goalPlan: acceptedPlan });
+  } catch {
+    console.error('Goal plan acceptance failed.');
+    res.status(500).json({ error: 'Could not accept the goal plan.' });
+  }
+});

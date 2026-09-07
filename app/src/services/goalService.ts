@@ -1,4 +1,4 @@
-const API_URL = 'http://192.168.2.103:3000';
+import { API_URL } from '../config/api';
 
 type GoalInput = {
   goal: string;

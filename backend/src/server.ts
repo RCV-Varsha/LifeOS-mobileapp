@@ -1,8 +1,14 @@
 import express from 'express'
 import { pool } from './db.ts';
+import { goalPlanRouter } from './goalPlanRoutes.ts';
+
+
 const app=express()
+
+
 const port=3000
 app.use(express.json({ limit: '10kb' }));
+app.use('/goals', goalPlanRouter);
 app.post('/goals', async (req, res) => {
   const body: unknown = req.body;
 
