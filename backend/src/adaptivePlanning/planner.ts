@@ -5,11 +5,14 @@ export function evaluateDailyPlan(
   availableMinutes: number,
   priorityTaskId: string | null,
   maxMajorTasks: number | null = null,
+  reservedBufferMinutes = 0,
 ): PlanEvaluation {
   if (!Number.isInteger(availableMinutes) || availableMinutes < 0 || availableMinutes > 1440) {
     throw new Error('Available minutes must be an integer from 0–1440');
   }
   if (maxMajorTasks !== null && (!Number.isInteger(maxMajorTasks) || maxMajorTasks < 1 || maxMajorTasks > 10)) throw new Error('Maximum major tasks must be 1–10');
+  if (!Number.isInteger(reservedBufferMinutes) || reservedBufferMinutes < 0 || reservedBufferMinutes > 240) throw new Error('Reserved buffer must be 0–240 minutes');
+  const usableMinutes = Math.max(0, availableMinutes - reservedBufferMinutes);
 
   const eligible = tasks.filter((task) => task.status === 'pending');
   const ranked = [...eligible].sort((left, right) => {
@@ -28,22 +31,23 @@ export function evaluateDailyPlan(
       message: `“${task.instruction}” has no reliable duration estimate.`,
     }));
   const withinPreferredCount = maxMajorTasks === null || eligible.length <= maxMajorTasks;
-  const currentPlanFits = uncertainty.length === 0 && requiredMinutes <= availableMinutes && withinPreferredCount;
+  const currentPlanFits = uncertainty.length === 0 && requiredMinutes <= usableMinutes && withinPreferredCount;
 
   if (currentPlanFits) {
     return {
       availableMinutes,
+      reservedBufferMinutes,
       requiredMinutes,
       selected: ranked.map((task) => ({ taskId: task.id, allocationMinutes: task.estimatedMinutes! })),
       omittedTaskIds: [],
-      remainingMinutes: availableMinutes - requiredMinutes,
+      remainingMinutes: usableMinutes - requiredMinutes,
       conflicts: [],
       uncertainty,
       currentPlanFits: true,
     };
   }
 
-  let remainingMinutes = availableMinutes;
+  let remainingMinutes = usableMinutes;
   const selected: PlanEvaluation['selected'] = [];
   const omittedTaskIds: string[] = [];
   const conflicts: PlanEvaluation['conflicts'] = [];
@@ -66,25 +70,29 @@ export function evaluateDailyPlan(
       }
     }
   }
-  if (requiredMinutes > availableMinutes) {
+  if (requiredMinutes > usableMinutes) {
     conflicts.push({
       code: 'insufficient_capacity',
       taskId: null,
-      message: `The known work needs ${requiredMinutes} minutes, exceeding capacity by ${requiredMinutes - availableMinutes}.`,
+      message: `The known work needs ${requiredMinutes} minutes, exceeding usable capacity by ${requiredMinutes - usableMinutes}.`,
     });
   }
   if (!withinPreferredCount) {
     conflicts.push({ code: 'preference_task_limit', taskId: null, message: `Your preference limits adaptive plans to ${maxMajorTasks} major task${maxMajorTasks === 1 ? '' : 's'}.` });
   }
+  if (reservedBufferMinutes > 0) conflicts.push({code:'memory_buffer_constraint',taskId:null,message:`Your explicit memory reserves ${reservedBufferMinutes} minutes as unallocated buffer.`});
 
-  return { availableMinutes, requiredMinutes, selected, omittedTaskIds, remainingMinutes, conflicts, uncertainty, currentPlanFits: false };
+  return { availableMinutes, reservedBufferMinutes, requiredMinutes, selected, omittedTaskIds, remainingMinutes, conflicts, uncertainty, currentPlanFits: false };
 }
 
 export function validateEditedSelection(
   tasks: PlanningTask[],
   availableMinutes: number,
   selected: { taskId: string; allocationMinutes: number }[],
+  reservedBufferMinutes = 0,
 ): PlanEvaluation {
+  if (!Number.isInteger(reservedBufferMinutes) || reservedBufferMinutes < 0 || reservedBufferMinutes > 240) throw new Error('Reserved buffer must be 0–240 minutes');
+  const usableMinutes = Math.max(0, availableMinutes - reservedBufferMinutes);
   const eligible = new Map(tasks.filter((task) => task.status === 'pending').map((task) => [task.id, task]));
   const seen = new Set<string>();
   let allocated = 0;
@@ -96,19 +104,20 @@ export function validateEditedSelection(
     seen.add(item.taskId);
     allocated += item.allocationMinutes;
   }
-  if (allocated > availableMinutes) throw new Error('Selected allocations exceed available capacity');
+  if (allocated > usableMinutes) throw new Error('Selected allocations exceed available capacity after the reserved buffer');
   const requiredMinutes = [...eligible.values()].reduce((sum, task) => sum + (task.estimatedMinutes ?? 0), 0);
   const uncertainty = [...eligible.values()].filter((task) => task.estimatedMinutes === null).map((task) => ({
     code: 'unknown_duration' as const, taskId: task.id, message: `“${task.instruction}” has no reliable duration estimate.`,
   }));
   return {
     availableMinutes,
+    reservedBufferMinutes,
     requiredMinutes,
     selected,
     omittedTaskIds: [...eligible.keys()].filter((id) => !seen.has(id)),
-    remainingMinutes: availableMinutes - allocated,
-    conflicts: requiredMinutes > availableMinutes ? [{ code: 'insufficient_capacity', taskId: null, message: `The known work needs ${requiredMinutes} minutes, exceeding capacity by ${requiredMinutes - availableMinutes}.` }] : [],
+    remainingMinutes: usableMinutes - allocated,
+    conflicts: requiredMinutes > usableMinutes ? [{ code: 'insufficient_capacity', taskId: null, message: `The known work needs ${requiredMinutes} minutes, exceeding usable capacity by ${requiredMinutes - usableMinutes}.` }] : [],
     uncertainty,
-    currentPlanFits: uncertainty.length === 0 && requiredMinutes <= availableMinutes,
+    currentPlanFits: uncertainty.length === 0 && requiredMinutes <= usableMinutes,
   };
 }

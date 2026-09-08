@@ -8,6 +8,7 @@ import { outcomeRouter } from './outcomeRoutes.ts';
 import { validateMilestoneInput, validateOutcomeInput } from './outcomes/validation.ts';
 import { currentUser, developmentAuthentication, rejectClientOwnership } from './auth.ts';
 import { preferenceRouter } from './preferenceRoutes.ts';
+import { memoryRouter } from './memoryRoutes.ts';
 
 
 const app=express()
@@ -33,6 +34,7 @@ app.use(dailyReviewRouter);
 app.use(adaptivePlanningRouter);
 app.use(outcomeRouter);
 app.use(preferenceRouter);
+app.use(memoryRouter);
 app.use('/goals', goalPlanRouter);
 app.post('/goals', async (req, res) => {
   const ownerId = currentUser(req).id;

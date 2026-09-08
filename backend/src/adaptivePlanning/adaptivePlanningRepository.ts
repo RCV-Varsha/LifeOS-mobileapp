@@ -35,7 +35,9 @@ function parseEvaluation(value: unknown): PlanEvaluation & { eligibleTasks: Plan
   if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new Error('Invalid stored proposal');
   const proposal = value as Record<string, unknown>;
   if (!Array.isArray(proposal.selected) || !Array.isArray(proposal.omittedTaskIds) || !Array.isArray(proposal.conflicts) || !Array.isArray(proposal.uncertainty) || !Array.isArray(proposal.eligibleTasks)) throw new Error('Invalid stored proposal');
-  return proposal as PlanEvaluation & { eligibleTasks: PlanningTask[] };
+  const reservedBufferMinutes=proposal.reservedBufferMinutes===undefined?0:proposal.reservedBufferMinutes;
+  if(!Number.isInteger(reservedBufferMinutes)||(reservedBufferMinutes as number)<0||(reservedBufferMinutes as number)>240)throw new Error('Invalid stored proposal buffer');
+  return {...proposal,reservedBufferMinutes} as PlanEvaluation & { eligibleTasks: PlanningTask[] };
 }
 
 function mapProposal(row: ProposalRow): AdaptiveProposal {
@@ -208,7 +210,7 @@ export class AdaptivePlanningRepository {
       if(row.status!=='ready') throw new AdaptiveConflictError('already_decided');
       const context=await client.query<{revision:number;availableMinutes:number}>('SELECT revision,available_minutes AS "availableMinutes" FROM public.daily_contexts WHERE owner_id=$1 AND local_date=$2 AND time_zone=$3 FOR UPDATE',[ownerId,row.date,row.timeZone]);
       const stored=parseEvaluation(row.proposal);
-      if(context.rows[0]?.revision!==row.contextRevision || stored.selected.reduce((sum,item)=>sum+item.allocationMinutes,0)>(context.rows[0]?.availableMinutes??-1)) throw new AdaptiveConflictError('stale');
+      if(context.rows[0]?.revision!==row.contextRevision || stored.selected.reduce((sum,item)=>sum+item.allocationMinutes,0)>Math.max(-1,(context.rows[0]?.availableMinutes??-1)-stored.reservedBufferMinutes)) throw new AdaptiveConflictError('stale');
       await assertVersions(client,ownerId,row.taskRevisions,row.planVersions);
       const dailyPlan=await client.query<{id:string;version:number;active:boolean}>(
         `INSERT INTO public.daily_plans(owner_id,local_date,time_zone) VALUES($1,$2,$3)

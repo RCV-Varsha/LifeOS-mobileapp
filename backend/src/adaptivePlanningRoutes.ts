@@ -6,6 +6,7 @@ import { generateAdaptiveExplanation } from './adaptivePlanning/groqExplanationS
 import { evaluateDailyPlan, validateEditedSelection } from './adaptivePlanning/planner.ts';
 import { currentUser } from './auth.ts';
 import { PreferenceRepository } from './preferences/preferenceRepository.ts';
+import { MemoryRepository } from './memories/memoryRepository.ts';
 
 const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const keyPattern=/^[A-Za-z0-9._:-]{8,200}$/;
@@ -18,6 +19,7 @@ export function createAdaptivePlanningRouter(
   explain=generateAdaptiveExplanation,
   now=()=>new Date(),
   preferences=new PreferenceRepository(pool),
+  memories=new MemoryRepository(pool),
 ){
   const router=Router();
 
@@ -52,11 +54,12 @@ export function createAdaptivePlanningRouter(
     const includeExplanation=!object(req.body)||req.body.includeExplanation!==false;
     try{
       const preferenceContext=await preferences.context(ownerId,['PLANNING','INTERACTION']);
-      const hash=requestHash({date:date.isoDate,timeZone,includeExplanation,preferences:preferenceContext});
+      const memoryContext=await memories.planningContext(ownerId);
+      const hash=requestHash({date:date.isoDate,timeZone,includeExplanation,preferences:preferenceContext,memories:memoryContext});
       const context=await repository.getContext(ownerId,date.isoDate,timeZone);
       if(!context){res.status(409).json({error:'Save available time before requesting a proposal.',code:'context_required'});return;}
       const tasks=await repository.tasksForDate(ownerId,date,timeZone);
-      const evaluation=evaluateDailyPlan(tasks,context.availableMinutes,context.priorityTaskId,preferenceContext.maxMajorTasks);
+      const evaluation=evaluateDailyPlan(tasks,context.availableMinutes,context.priorityTaskId,preferenceContext.maxMajorTasks,memoryContext.dailyBufferMinutes);
       if(evaluation.currentPlanFits){res.status(200).json({kind:'no_change',evaluation,tasks});return;}
       let explanation=null;let aiFallback=false;
       if(includeExplanation&&process.env.GROQ_API_KEY&&process.env.GROQ_MODEL){try{explanation=await explain(evaluation,tasks,preferenceContext.explanationLength);}catch(error){aiFallback=true;console.error('Adaptive explanation unavailable:',error instanceof Error?error.name:'Unknown');}}
@@ -79,7 +82,7 @@ export function createAdaptivePlanningRouter(
     if(!object(req.body)||Object.keys(req.body).length!==1||!Array.isArray(req.body.selected)){res.status(400).json({error:'Provide selected task allocations.'});return;}
     const selected=[] as {taskId:string;allocationMinutes:number}[];
     for(const item of req.body.selected){if(!object(item)||Object.keys(item).length!==2||typeof item.taskId!=='string'||!uuidPattern.test(item.taskId)||!Number.isInteger(item.allocationMinutes)){res.status(400).json({error:'Invalid selected task allocation.'});return;}selected.push({taskId:item.taskId,allocationMinutes:item.allocationMinutes as number});}
-    try{const current=await repository.getProposal(ownerId,id);if(!current){res.status(404).json({error:'Proposal not found.'});return;}const evaluation=validateEditedSelection(current.eligibleTasks,current.availableMinutes,selected);const proposal=await repository.editProposal(ownerId,id,evaluation);res.status(200).json({proposal});}
+    try{const current=await repository.getProposal(ownerId,id);if(!current){res.status(404).json({error:'Proposal not found.'});return;}const evaluation=validateEditedSelection(current.eligibleTasks,current.availableMinutes,selected,current.reservedBufferMinutes);const proposal=await repository.editProposal(ownerId,id,evaluation);res.status(200).json({proposal});}
     catch(error){if(error instanceof AdaptiveConflictError)res.status(409).json({error:'This proposal can no longer be edited.',code:error.code});else if(error instanceof Error)res.status(400).json({error:error.message,code:'invalid_selection'});else res.status(500).json({error:'Could not edit the proposal.'});}
   });
 

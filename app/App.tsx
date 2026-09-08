@@ -8,10 +8,11 @@ import TodayScreen from './src/screens/TodayScreen';
 import DailyReviewScreen from './src/screens/DailyReviewScreen';
 import { getCurrentSession, type CurrentSession } from './src/services/sessionService';
 import PreferencesScreen from './src/screens/PreferencesScreen';
+import MemoryScreen from './src/screens/MemoryScreen';
 export default function App() {
   const [session, setSession] = useState<CurrentSession | null>(null);
   const [sessionError, setSessionError] = useState(false);
-  const [screen, setScreen] = useState<'today' | 'goals' | 'addGoal' | 'goalPlan' | 'dailyReview' | 'preferences'>('today');
+  const [screen, setScreen] = useState<'today' | 'goals' | 'addGoal' | 'goalPlan' | 'dailyReview' | 'preferences' | 'memory'>('today');
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [selectedGoalTitle, setSelectedGoalTitle] = useState('');
   const [reviewDate, setReviewDate] = useState('');
@@ -37,7 +38,9 @@ export default function App() {
   return (
     <>
       {screen === 'today' ? (
-        <TodayScreen onManageGoals={() => setScreen('goals')} onDailyReview={(date) => { setReviewDate(date); setScreen('dailyReview'); }} onPreferences={() => setScreen('preferences')} />
+        <TodayScreen onManageGoals={() => setScreen('goals')} onDailyReview={(date) => { setReviewDate(date); setScreen('dailyReview'); }} onPreferences={() => setScreen('preferences')} onMemory={() => setScreen('memory')} />
+      ) : screen === 'memory' ? (
+        <MemoryScreen onBack={() => setScreen('today')} />
       ) : screen === 'preferences' ? (
         <PreferencesScreen onBack={() => setScreen('today')} />
       ) : screen === 'dailyReview' && reviewDate ? (

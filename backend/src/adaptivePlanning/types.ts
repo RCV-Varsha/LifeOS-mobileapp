@@ -19,7 +19,7 @@ export type PlannedItem = {
 };
 
 export type PlanConflict = {
-  code: 'priority_does_not_fit' | 'insufficient_capacity' | 'preference_task_limit';
+  code: 'priority_does_not_fit' | 'insufficient_capacity' | 'preference_task_limit' | 'memory_buffer_constraint';
   taskId: string | null;
   message: string;
 };
@@ -32,6 +32,7 @@ export type PlanUncertainty = {
 
 export type PlanEvaluation = {
   availableMinutes: number;
+  reservedBufferMinutes: number;
   requiredMinutes: number;
   selected: PlannedItem[];
   omittedTaskIds: string[];

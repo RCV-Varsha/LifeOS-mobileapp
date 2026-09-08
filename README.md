@@ -11,6 +11,7 @@ organize their goals, tasks, habits, and plans.
 - Goal → explicit desired outcome → milestones → optionally linked tasks, with activity and achievement progress kept distinct.
 - Development identity → current-user authorization → isolated owned domain data.
 - Explicit preferences → corrections → scoped planning and explanation behavior.
+- Explicit memory → consent and corrections → deterministic planning constraint.
 
 ## Workspace
 
@@ -38,3 +39,6 @@ ownership constraints, migration behavior, and production-auth replacement bound
 
 See `docs/user-preferences-and-corrections.md`, `docs/api/preferences.md`, and
 `docs/decisions/008-controlled-user-preferences.md` for controlled personalization semantics.
+
+See `docs/explicit-memory-foundation.md`, `docs/api/memories.md`, and
+`docs/decisions/009-explicit-memory-foundation.md` for the V7 memory trust boundary.
