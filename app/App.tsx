@@ -4,9 +4,11 @@ import GoalsScreen from './src/screens/GoalsScreen';
 import GoalOnboardingScreen from './src/screens/GoalOnboardingScreen';
 import GoalPlanScreen from './src/screens/GoalPlanScreen';
 import TodayScreen from './src/screens/TodayScreen';
+import DailyReviewScreen from './src/screens/DailyReviewScreen';
 export default function App() {
-  const [screen, setScreen] = useState<'today' | 'goals' | 'addGoal' | 'goalPlan'>('today');
+  const [screen, setScreen] = useState<'today' | 'goals' | 'addGoal' | 'goalPlan' | 'dailyReview'>('today');
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
+  const [reviewDate, setReviewDate] = useState('');
 
   function openGoalPlan(goalId: string) {
     setSelectedGoalId(goalId);
@@ -16,7 +18,9 @@ export default function App() {
   return (
     <>
       {screen === 'today' ? (
-        <TodayScreen onManageGoals={() => setScreen('goals')} />
+        <TodayScreen onManageGoals={() => setScreen('goals')} onDailyReview={(date) => { setReviewDate(date); setScreen('dailyReview'); }} />
+      ) : screen === 'dailyReview' && reviewDate ? (
+        <DailyReviewScreen date={reviewDate} onBack={() => setScreen('today')} />
       ) : screen === 'goals' ? (
         <GoalsScreen
           onAddGoal={() => setScreen('addGoal')}

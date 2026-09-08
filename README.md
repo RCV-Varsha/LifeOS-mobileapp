@@ -3,11 +3,10 @@
 LifeOS is an AI-powered mobile application for helping users
 organize their goals, tasks, habits, and plans.
 
-## Initial focus
+## Implemented vertical slices
 
-Build one end-to-end journey: collect basic user context,
-store it, generate an AI-assisted plan, validate the result,
-and display it in the mobile app.
+- Goal → validated AI plan → accepted persistent tasks → daily execution.
+- Daily execution data → deterministic metrics → validated, persisted AI insight.
 
 ## Workspace
 
@@ -20,3 +19,6 @@ and display it in the mobile app.
 
 Database credentials and AI API keys belong on the backend,
 never in the mobile application.
+
+See `docs/ai-daily-review-contract.md`, `docs/api/daily-reviews.md`, and
+`docs/decisions/005-daily-review-v1.md` for the Daily Review slice.

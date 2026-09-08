@@ -17,6 +17,7 @@ import {
 
 type Props = {
   onManageGoals: () => void;
+  onDailyReview: (date: string) => void;
 };
 
 function calculateProgress(tasks: LifeTask[]) {
@@ -29,7 +30,7 @@ function calculateProgress(tasks: LifeTask[]) {
   };
 }
 
-export default function TodayScreen({ onManageGoals }: Props) {
+export default function TodayScreen({ onManageGoals, onDailyReview }: Props) {
   const [tasks, setTasks] = useState<LifeTask[]>([]);
   const [date, setDate] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -179,6 +180,7 @@ export default function TodayScreen({ onManageGoals }: Props) {
       {error && tasks.length > 0 ? <Text style={styles.error}>{error}</Text> : null}
 
       <View style={styles.actions}>
+        <Button title="Daily review" onPress={() => onDailyReview(date)} disabled={isLoading || !date} />
         <Button title="Refresh" onPress={() => setReload((value) => value + 1)} disabled={isLoading} />
         <Button title="Manage goals" onPress={onManageGoals} />
       </View>
