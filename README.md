@@ -7,6 +7,7 @@ organize their goals, tasks, habits, and plans.
 
 - Goal → validated AI plan → accepted persistent tasks → daily execution.
 - Daily execution data → deterministic metrics → validated, persisted AI insight.
+- Changed daily context → deterministic feasibility → user-approved adaptive plan → execution.
 
 ## Workspace
 
@@ -22,3 +23,6 @@ never in the mobile application.
 
 See `docs/ai-daily-review-contract.md`, `docs/api/daily-reviews.md`, and
 `docs/decisions/005-daily-review-v1.md` for the Daily Review slice.
+
+See `docs/api/adaptive-planning.md` and
+`docs/decisions/006-adaptive-daily-planning.md` for Adaptive Daily Planning.

@@ -1,236 +1,44 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Button,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import {
-  completeTask,
-  getTodayTasks,
-  uncompleteTask,
-  type LifeTask,
-} from '../services/taskService';
+import { ActivityIndicator, Button, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { completeTask, getTodayTasks, uncompleteTask, type LifeTask } from '../services/taskService';
+import { acceptAdaptiveProposal, createAdaptiveProposal, editAdaptiveProposal, getDailyContext, newIdempotencyKey, rejectAdaptiveProposal, saveDailyContext, type AdaptiveProposal, type Selection } from '../services/adaptivePlanningService';
 
-type Props = {
-  onManageGoals: () => void;
-  onDailyReview: (date: string) => void;
-};
+type Props={onManageGoals:()=>void;onDailyReview:(date:string)=>void};
+function progress(tasks:LifeTask[]){const completed=tasks.filter((task)=>task.status==='completed').length;return{completed,total:tasks.length,percent:tasks.length===0?0:Math.round(completed/tasks.length*100)};}
 
-function calculateProgress(tasks: LifeTask[]) {
-  const completed = tasks.filter((task) => task.status === 'completed').length;
-  const total = tasks.length;
-  return {
-    completed,
-    total,
-    percent: total === 0 ? 0 : Math.round((completed / total) * 100),
-  };
+export default function TodayScreen({onManageGoals,onDailyReview}:Props){
+  const [tasks,setTasks]=useState<LifeTask[]>([]);const [date,setDate]=useState('');const [isLoading,setIsLoading]=useState(true);
+  const [working,setWorking]=useState(false);const [updatingTaskId,setUpdatingTaskId]=useState<string|null>(null);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [reload,setReload]=useState(0);
+  const [available,setAvailable]=useState('');const [priorityTaskId,setPriorityTaskId]=useState<string|null>(null);const [blocker,setBlocker]=useState('');const [note,setNote]=useState('');
+  const [proposal,setProposal]=useState<AdaptiveProposal|null>(null);const [draft,setDraft]=useState<Record<string,string>>({});const [proposalKey,setProposalKey]=useState('');const [acceptKey,setAcceptKey]=useState('');
+  const [acceptanceAttempted,setAcceptanceAttempted]=useState(false);
+  useEffect(()=>{let active=true;const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),10000);setIsLoading(true);setError('');
+    void getTodayTasks(controller.signal).then(async(today)=>{if(!active)return;setTasks(today.tasks);setDate(today.date);const context=await getDailyContext(today.date,controller.signal);if(!active)return;if(context){setAvailable(String(context.availableMinutes));setPriorityTaskId(context.priorityTaskId);setBlocker(context.blocker);setNote(context.note);}else setAvailable(String(today.tasks.filter((task)=>task.status==='pending').reduce((sum,task)=>sum+(task.allocatedMinutes??task.plannedMinutes),0)));})
+      .catch(()=>{if(active)setError("Could not load today's plan.");}).finally(()=>{clearTimeout(timeout);if(active)setIsLoading(false);});
+    return()=>{active=false;clearTimeout(timeout);controller.abort();};},[reload]);
+  const summary=progress(tasks);const groups=useMemo(()=>{const map=new Map<string,{title:string;tasks:LifeTask[]}>();for(const task of tasks){const item=map.get(task.goalId);if(item)item.tasks.push(task);else map.set(task.goalId,{title:task.goalTitle,tasks:[task]});}return[...map.entries()];},[tasks]);
+  async function toggleTask(task:LifeTask){if(updatingTaskId)return;setUpdatingTaskId(task.id);setError('');try{const updated=task.status==='pending'?await completeTask(task.id):await uncompleteTask(task.id);setTasks((current)=>current.map((item)=>item.id===updated.id?updated:item));}catch{setError('The task update was not saved.');}finally{setUpdatingTaskId(null);}}
+  function loadDraft(value:AdaptiveProposal){setDraft(Object.fromEntries(value.selected.map((item)=>[item.taskId,String(item.allocationMinutes)])));}
+  async function evaluate(){const minutes=Number(available);if(!Number.isInteger(minutes)||minutes<0||minutes>1440){setError('Available time must be a whole number from 0–1440.');return;}setWorking(true);setError('');setNotice('');
+    try{await saveDailyContext(date,{availableMinutes:minutes,priorityTaskId,blocker,note});const key=proposalKey||newIdempotencyKey('proposal');setProposalKey(key);const result=await createAdaptiveProposal(date,key);if(result.kind==='no_change'){setProposal(null);setNotice(`Your current plan still fits with ${result.evaluation.remainingMinutes} minutes remaining. No change needed.`);}else{setProposal(result.proposal);loadDraft(result.proposal);setNotice(result.aiFallback?'A deterministic proposal is ready. AI explanation was unavailable.':'A proposal is ready. Nothing changes until you accept.');setAcceptKey(newIdempotencyKey('accept'));setAcceptanceAttempted(false);}}
+    catch(reason){setError(reason instanceof Error?reason.message:'Could not evaluate the plan.');}finally{setWorking(false);}}
+  function toggleSelection(taskId:string,estimate:number|null){setDraft((current)=>{const next={...current};if(Object.hasOwn(next,taskId))delete next[taskId];else next[taskId]=String(estimate??'');return next;});}
+  function selection():Selection[]{return Object.entries(draft).map(([taskId,value])=>({taskId,allocationMinutes:Number(value)}));}
+  async function saveEdits(){if(!proposal)return;setWorking(true);setError('');try{const updated=await editAdaptiveProposal(proposal.id,selection());setProposal(updated);loadDraft(updated);setNotice('Your edits are saved in the proposal. The daily plan is still unchanged.');}catch(reason){setError(reason instanceof Error?reason.message:'Could not save edits.');}finally{setWorking(false);}}
+  async function accept(){if(!proposal)return;setWorking(true);setError('');try{let id=proposal.id;if(!acceptanceAttempted){const updated=await editAdaptiveProposal(id,selection());id=updated.id;setAcceptanceAttempted(true);}await acceptAdaptiveProposal(id,acceptKey||newIdempotencyKey('accept'));setProposal(null);setNotice('Adaptive plan accepted. Today now reflects your decision.');setReload((value)=>value+1);}catch(reason){setError(reason instanceof Error?reason.message:'Could not accept the proposal. Retry to reconcile the result.');}finally{setWorking(false);}}
+  async function reject(){if(!proposal)return;setWorking(true);setError('');try{await rejectAdaptiveProposal(proposal.id);setProposal(null);setNotice('Proposal rejected. Your current daily plan was not changed.');}catch(reason){setError(reason instanceof Error?reason.message:'Could not reject the proposal.');}finally{setWorking(false);}}
+
+  return <ScrollView contentContainerStyle={styles.container}>
+    <Text style={styles.eyebrow}>TODAY</Text><Text style={styles.heading}>Your daily plan</Text>{date?<Text style={styles.date}>{date}</Text>:null}
+    {isLoading?<ActivityIndicator style={styles.loading} size="large"/>:error&&tasks.length===0?<View style={styles.message}><Text style={styles.error}>{error}</Text><Button title="Try again" onPress={()=>setReload((v)=>v+1)}/></View>:<>
+      <View style={styles.summary}><Text style={styles.label}>Progress</Text><Text style={styles.count}>{summary.completed} / {summary.total} completed</Text><Text style={styles.percent}>{summary.percent}%</Text><Text style={styles.muted}>Changing today’s allocation does not count as progress.</Text></View>
+      {tasks.length===0?<View style={styles.message}><Text style={styles.sectionTitle}>Nothing scheduled for today</Text><Text style={styles.muted}>Accept a goal plan to create daily tasks.</Text></View>:groups.map(([goalId,group])=><View key={goalId} style={styles.goal}><Text style={styles.goalTitle}>{group.title}</Text>{group.tasks.map((task)=>{const completed=task.status==='completed';return <Pressable key={task.id} accessibilityRole="checkbox" accessibilityState={{checked:completed}} disabled={Boolean(updatingTaskId)} onPress={()=>void toggleTask(task)} style={[styles.task,completed&&styles.completed]}><Text style={styles.checkbox}>{completed?'☑':'☐'}</Text><View style={{flex:1}}><Text style={[styles.instruction,completed&&styles.done]}>{task.instruction}</Text><Text style={styles.muted}>{task.allocatedMinutes??task.plannedMinutes} min{task.allocatedMinutes!==null&&task.allocatedMinutes!==task.plannedMinutes?` allocated · ${task.plannedMinutes} min estimate`:''}</Text></View></Pressable>;})}</View>)}
+      {tasks.length>0?<View style={styles.adapt}><Text style={styles.sectionTitle}>Did your day change?</Text><Text style={styles.muted}>Set today’s capacity. LifeOS evaluates first and never changes the plan without Accept.</Text><Text style={styles.label}>Available minutes today</Text><TextInput style={styles.input} keyboardType="number-pad" value={available} onChangeText={(value)=>{setAvailable(value);setProposalKey('');}}/><Text style={styles.label}>Priority task (optional)</Text>{tasks.filter((task)=>task.status==='pending').map((task)=><Pressable key={`priority-${task.id}`} onPress={()=>{setPriorityTaskId(priorityTaskId===task.id?null:task.id);setProposalKey('');}} style={[styles.choice,priorityTaskId===task.id&&styles.chosen]}><Text>{priorityTaskId===task.id?'●':'○'} {task.instruction}</Text></Pressable>)}<Text style={styles.label}>Blocker (optional)</Text><TextInput style={styles.input} value={blocker} onChangeText={(value)=>{setBlocker(value);setProposalKey('');}} maxLength={500}/><Text style={styles.label}>What changed? (optional)</Text><TextInput style={[styles.input,{minHeight:64}]} multiline value={note} onChangeText={(value)=>{setNote(value);setProposalKey('');}} maxLength={1000}/><Button title={working?'Evaluating…':'Evaluate my plan'} disabled={working} onPress={()=>void evaluate()}/></View>:null}
+      {proposal?<View style={styles.proposal}><Text style={styles.sectionTitle}>Proposed change</Text><Text style={styles.warning}>Not applied yet</Text>{proposal.explanation?<><Text style={styles.proposalSummary}>{proposal.explanation.summary}</Text><Text style={styles.muted}>{proposal.explanation.reason}</Text></>:null}<Text style={styles.label}>Choose tasks and allocations</Text>{proposal.eligibleTasks.map((task)=>{const selected=Object.hasOwn(draft,task.id);return <View key={`edit-${task.id}`} style={styles.editRow}><Pressable style={{flex:1}} onPress={()=>toggleSelection(task.id,task.estimatedMinutes)}><Text>{selected?'☑':'☐'} {task.instruction}</Text><Text style={styles.muted}>{task.estimatedMinutes===null?'Unknown estimate':`${task.estimatedMinutes} min estimate`}</Text></Pressable>{selected?<TextInput accessibilityLabel={`Allocation for ${task.instruction}`} style={styles.allocation} keyboardType="number-pad" value={draft[task.id]} onChangeText={(value)=>setDraft((current)=>({...current,[task.id]:value}))}/>:null}</View>;})}<Text style={styles.muted}>Draft allocation: {Object.values(draft).reduce((sum,value)=>sum+(Number(value)||0),0)} / {proposal.availableMinutes} min</Text>{proposal.conflicts.map((item,index)=><Text key={`conflict-${index}`} style={styles.error}>{item.message}</Text>)}{proposal.uncertainty.map((item)=><Text key={item.taskId} style={styles.warning}>{item.message}</Text>)}<View style={styles.buttons}><Button title="Save edits" onPress={()=>void saveEdits()} disabled={working}/><Button title="Accept" onPress={()=>void accept()} disabled={working}/><Button title="Reject" onPress={()=>void reject()} disabled={working}/></View></View>:null}
+    </>}
+    {notice?<Text style={styles.notice}>{notice}</Text>:null}{error&&tasks.length>0?<Text style={styles.error}>{error}</Text>:null}
+    <View style={styles.buttons}><Button title="Daily review" onPress={()=>onDailyReview(date)} disabled={isLoading||!date}/><Button title="Refresh" onPress={()=>setReload((v)=>v+1)} disabled={isLoading}/><Button title="Manage goals" onPress={onManageGoals}/></View>
+  </ScrollView>;
 }
 
-export default function TodayScreen({ onManageGoals, onDailyReview }: Props) {
-  const [tasks, setTasks] = useState<LifeTask[]>([]);
-  const [date, setDate] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const [reload, setReload] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    async function load() {
-      setIsLoading(true);
-      setError('');
-
-      try {
-        const today = await getTodayTasks(controller.signal);
-        if (active) {
-          setTasks(today.tasks);
-          setDate(today.date);
-        }
-      } catch {
-        if (active) setError("Could not load today's tasks.");
-      } finally {
-        clearTimeout(timeout);
-        if (active) setIsLoading(false);
-      }
-    }
-
-    void load();
-    return () => {
-      active = false;
-      clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [reload]);
-
-  const progress = calculateProgress(tasks);
-  const goalGroups = useMemo(() => {
-    const groups = new Map<string, { title: string; tasks: LifeTask[] }>();
-
-    for (const task of tasks) {
-      const group = groups.get(task.goalId);
-      if (group) group.tasks.push(task);
-      else groups.set(task.goalId, { title: task.goalTitle, tasks: [task] });
-    }
-
-    return [...groups.entries()];
-  }, [tasks]);
-
-  async function toggleTask(task: LifeTask) {
-    if (updatingTaskId) return;
-
-    setUpdatingTaskId(task.id);
-    setError('');
-
-    try {
-      const updated =
-        task.status === 'pending'
-          ? await completeTask(task.id)
-          : await uncompleteTask(task.id);
-
-      setTasks((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
-      );
-    } catch {
-      setError('The task update was not saved. Please try again.');
-    } finally {
-      setUpdatingTaskId(null);
-    }
-  }
-
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.eyebrow}>TODAY</Text>
-      <Text style={styles.heading}>Your daily plan</Text>
-      {date ? <Text style={styles.date}>{date}</Text> : null}
-
-      {isLoading ? (
-        <ActivityIndicator style={styles.loading} size="large" />
-      ) : error && tasks.length === 0 ? (
-        <View style={styles.messageBlock}>
-          <Text style={styles.error}>{error}</Text>
-          <Button title="Try again" onPress={() => setReload((value) => value + 1)} />
-        </View>
-      ) : tasks.length === 0 ? (
-        <View style={styles.messageBlock}>
-          <Text style={styles.emptyTitle}>Nothing scheduled for today</Text>
-          <Text style={styles.muted}>
-            Accept a goal plan to turn its actions into daily tasks.
-          </Text>
-        </View>
-      ) : (
-        <>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Progress</Text>
-            <Text style={styles.progressCount}>
-              {progress.completed} / {progress.total} completed
-            </Text>
-            <Text style={styles.percent}>{progress.percent}%</Text>
-            <Text style={styles.muted}>
-              {progress.total - progress.completed === 0
-                ? 'Everything planned for today is complete.'
-                : `${progress.total - progress.completed} task${progress.total - progress.completed === 1 ? '' : 's'} need attention.`}
-            </Text>
-          </View>
-
-          {goalGroups.map(([goalId, group]) => (
-            <View key={goalId} style={styles.goalSection}>
-              <Text style={styles.goalTitle}>{group.title}</Text>
-
-              {group.tasks.map((task) => {
-                const completed = task.status === 'completed';
-                const updating = updatingTaskId === task.id;
-
-                return (
-                  <Pressable
-                    key={task.id}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: completed, disabled: Boolean(updatingTaskId) }}
-                    disabled={Boolean(updatingTaskId)}
-                    onPress={() => void toggleTask(task)}
-                    style={({ pressed }) => [
-                      styles.task,
-                      completed && styles.completedTask,
-                      pressed && styles.pressedTask,
-                    ]}
-                  >
-                    <Text style={styles.checkbox}>{completed ? '☑' : '☐'}</Text>
-                    <View style={styles.taskText}>
-                      <Text style={[styles.instruction, completed && styles.completedText]}>
-                        {task.instruction}
-                      </Text>
-                      <Text style={styles.minutes}>
-                        {task.plannedMinutes} min{updating ? ' · Saving…' : ''}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-        </>
-      )}
-
-      {error && tasks.length > 0 ? <Text style={styles.error}>{error}</Text> : null}
-
-      <View style={styles.actions}>
-        <Button title="Daily review" onPress={() => onDailyReview(date)} disabled={isLoading || !date} />
-        <Button title="Refresh" onPress={() => setReload((value) => value + 1)} disabled={isLoading} />
-        <Button title="Manage goals" onPress={onManageGoals} />
-      </View>
-    </ScrollView>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 48,
-    backgroundColor: '#fff',
-  },
-  eyebrow: { color: '#1976b8', fontWeight: '800', letterSpacing: 1.4 },
-  heading: { fontSize: 28, fontWeight: '700', marginTop: 6 },
-  date: { color: '#666', marginTop: 6 },
-  loading: { marginTop: 48 },
-  messageBlock: { gap: 14, marginVertical: 40 },
-  emptyTitle: { fontSize: 19, fontWeight: '600' },
-  muted: { color: '#666', lineHeight: 21 },
-  error: { color: '#b00020', marginTop: 18 },
-  summaryCard: {
-    padding: 18,
-    marginTop: 24,
-    marginBottom: 12,
-    borderRadius: 10,
-    backgroundColor: '#eef7fc',
-  },
-  summaryLabel: { fontWeight: '700', color: '#24566f' },
-  progressCount: { fontSize: 20, fontWeight: '700', marginTop: 8 },
-  percent: { fontSize: 34, fontWeight: '800', color: '#1976b8', marginVertical: 6 },
-  goalSection: { marginTop: 22 },
-  goalTitle: { fontSize: 20, fontWeight: '700', marginBottom: 10 },
-  task: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: 15,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 9,
-  },
-  completedTask: { backgroundColor: '#f4faf6', borderColor: '#b8d8c2' },
-  pressedTask: { opacity: 0.65 },
-  checkbox: { fontSize: 25, marginRight: 12, color: '#1976b8' },
-  taskText: { flex: 1 },
-  instruction: { fontSize: 16, lineHeight: 22 },
-  completedText: { textDecorationLine: 'line-through', color: '#66736a' },
-  minutes: { color: '#666', marginTop: 6 },
-  actions: { gap: 10, marginTop: 30 },
-});
+const styles=StyleSheet.create({container:{flexGrow:1,paddingHorizontal:24,paddingTop:60,paddingBottom:48,backgroundColor:'#fff'},eyebrow:{color:'#1976b8',fontWeight:'800',letterSpacing:1.4},heading:{fontSize:28,fontWeight:'700',marginTop:6},date:{color:'#666',marginTop:6},loading:{marginTop:48},message:{gap:14,marginVertical:40},muted:{color:'#666',lineHeight:21,marginTop:5},error:{color:'#b00020',marginTop:12},notice:{color:'#246b45',marginTop:18,lineHeight:21},summary:{padding:18,marginTop:24,borderRadius:10,backgroundColor:'#eef7fc'},label:{fontWeight:'700',color:'#24566f',marginTop:14,marginBottom:7},count:{fontSize:20,fontWeight:'700',marginTop:8},percent:{fontSize:34,fontWeight:'800',color:'#1976b8',marginVertical:6},goal:{marginTop:22},goalTitle:{fontSize:20,fontWeight:'700',marginBottom:10},task:{flexDirection:'row',alignItems:'flex-start',padding:15,marginBottom:10,borderWidth:1,borderColor:'#ddd',borderRadius:9},completed:{backgroundColor:'#f4faf6',borderColor:'#b8d8c2'},checkbox:{fontSize:25,marginRight:12,color:'#1976b8'},instruction:{fontSize:16,lineHeight:22},done:{textDecorationLine:'line-through',color:'#66736a'},adapt:{marginTop:28,padding:17,borderRadius:10,backgroundColor:'#f5f7f9',gap:6},sectionTitle:{fontSize:19,fontWeight:'700',marginBottom:5},input:{borderWidth:1,borderColor:'#888',borderRadius:8,padding:11,fontSize:16,backgroundColor:'#fff'},choice:{padding:10,borderWidth:1,borderColor:'#ddd',borderRadius:7,marginBottom:5},chosen:{borderColor:'#1976b8',backgroundColor:'#eef7fc'},proposal:{marginTop:24,padding:17,borderWidth:2,borderColor:'#6b4ba1',borderRadius:10},warning:{color:'#8a5800',fontWeight:'600',marginTop:6},proposalSummary:{fontSize:17,fontWeight:'600',marginTop:12,lineHeight:23},editRow:{flexDirection:'row',gap:10,alignItems:'center',paddingVertical:10,borderBottomWidth:1,borderBottomColor:'#eee'},allocation:{width:64,borderWidth:1,borderColor:'#888',borderRadius:7,padding:8,textAlign:'center'},buttons:{gap:10,marginTop:22}});

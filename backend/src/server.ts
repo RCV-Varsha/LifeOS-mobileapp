@@ -3,15 +3,20 @@ import { pool } from './db.ts';
 import { goalPlanRouter } from './goalPlanRoutes.ts';
 import { taskRouter } from './taskRoutes.ts';
 import { dailyReviewRouter } from './dailyReviewRoutes.ts';
+import { adaptivePlanningRouter } from './adaptivePlanningRoutes.ts';
 
 
 const app=express()
 
 
-const port=3000
+const configuredPort = Number(process.env.PORT ?? 3000);
+const port = Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort <= 65535
+  ? configuredPort
+  : 3000;
 app.use(express.json({ limit: '10kb' }));
 app.use(taskRouter);
 app.use(dailyReviewRouter);
+app.use(adaptivePlanningRouter);
 app.use('/goals', goalPlanRouter);
 app.post('/goals', async (req, res) => {
   const body: unknown = req.body;

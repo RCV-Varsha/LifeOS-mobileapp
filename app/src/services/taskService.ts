@@ -11,6 +11,7 @@ export type LifeTask = {
   position: number;
   instruction: string;
   plannedMinutes: number;
+  allocatedMinutes: number | null;
   status: TaskStatus;
   createdAt: string;
   completedAt: string | null;
@@ -47,12 +48,14 @@ function parseTask(value: unknown): LifeTask {
     typeof value.position !== 'number' ||
     !Number.isInteger(value.position) ||
     value.position < 1 ||
-    value.position > 3 ||
+    value.position > 100 ||
     typeof value.instruction !== 'string' ||
     typeof value.plannedMinutes !== 'number' ||
     !Number.isInteger(value.plannedMinutes) ||
     value.plannedMinutes < 1 ||
     value.plannedMinutes > 240 ||
+    !(value.allocatedMinutes === null || value.allocatedMinutes === undefined ||
+      (typeof value.allocatedMinutes === 'number' && Number.isInteger(value.allocatedMinutes) && value.allocatedMinutes > 0 && value.allocatedMinutes <= 1440)) ||
     (value.status !== 'pending' && value.status !== 'completed') ||
     typeof value.createdAt !== 'string' ||
     (value.completedAt !== null && typeof value.completedAt !== 'string') ||
@@ -62,7 +65,7 @@ function parseTask(value: unknown): LifeTask {
     throw new Error('Unexpected task response');
   }
 
-  return value as LifeTask;
+  return { ...value, allocatedMinutes: typeof value.allocatedMinutes === 'number' ? value.allocatedMinutes : null } as LifeTask;
 }
 
 function parseProgress(value: unknown): TaskProgress {

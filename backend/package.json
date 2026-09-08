@@ -8,7 +8,7 @@
     "start": "node --use-system-ca --env-file=.env src/server.ts",
     "dev": "node --use-system-ca --env-file=.env --watch src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/dailyReview/dailyReview.test.ts"
+    "test": "node --experimental-strip-types --test src/dailyReview/dailyReview.test.ts src/adaptivePlanning/adaptivePlanning.test.ts"
   },
   "keywords": [],
   "author": "",

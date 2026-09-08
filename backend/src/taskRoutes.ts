@@ -110,7 +110,19 @@ taskRouter.get('/tasks/today', async (req, res) => {
   }
 
   try {
-    const result = await pool.query<StoredTask & { acceptedAt: Date }>(
+    const today = calendarDay(new Date(), timeZone);
+    const dailyPlan = await pool.query<{ id: string }>(
+      `SELECT id FROM public.daily_plans WHERE owner_id='local' AND local_date=$1 AND time_zone=$2 AND active=TRUE`,
+      [today.isoDate,timeZone],
+    );
+    const adaptive = await pool.query<StoredTask & { allocatedMinutes: number }>(
+      `SELECT t.id,gp.goal_id AS "goalId",t.goal_plan_id AS "goalPlanId",gp.goal_title AS "goalTitle",
+       t.day_number AS "dayNumber",dpi.position,t.instruction,t.planned_minutes AS "plannedMinutes",
+       dpi.allocated_minutes AS "allocatedMinutes",t.status,t.created_at AS "createdAt",t.completed_at AS "completedAt"
+       FROM public.daily_plans dp INNER JOIN public.daily_plan_items dpi ON dpi.daily_plan_id=dp.id
+       INNER JOIN public.tasks t ON t.id=dpi.task_id INNER JOIN public.goal_plans gp ON gp.id=t.goal_plan_id
+       WHERE dp.owner_id='local' AND dp.local_date=$1 AND dp.time_zone=$2 ORDER BY dpi.position`,[today.isoDate,timeZone]);
+    const result = dailyPlan.rows.length>0?null:await pool.query<StoredTask & { acceptedAt: Date; allocatedMinutes:null }>(
       `${taskColumns},
               gp.accepted_at AS "acceptedAt"
        ${taskFrom}
@@ -119,8 +131,7 @@ taskRouter.get('/tasks/today', async (req, res) => {
        ORDER BY gp.accepted_at DESC, gp.goal_id, t.day_number, t.position`,
     );
 
-    const today = calendarDay(new Date(), timeZone);
-    const tasks = result.rows.filter((task) => {
+    const tasks = dailyPlan.rows.length>0?adaptive.rows:result!.rows.filter((task) => {
       const acceptedDay = calendarDay(task.acceptedAt, timeZone);
       const planDay = today.key - acceptedDay.key + 1;
       return planDay === task.dayNumber;
@@ -130,7 +141,10 @@ taskRouter.get('/tasks/today', async (req, res) => {
     res.status(200).json({
       date: today.isoDate,
       timeZone,
-      tasks: tasks.map(({ acceptedAt: _acceptedAt, ...task }) => task),
+      tasks: tasks.map((task) => {
+        const { acceptedAt: _acceptedAt, ...rest } = task as typeof task & {acceptedAt?:Date};
+        return rest;
+      }),
       progress: progressFor(tasks),
     });
   } catch {
@@ -149,7 +163,9 @@ async function setTaskCompletion(
          completed_at = CASE
            WHEN $2 = 'completed' THEN COALESCE(t.completed_at, CURRENT_TIMESTAMP)
            ELSE NULL
-         END
+         END,
+         revision = CASE WHEN t.status = $2 THEN t.revision ELSE t.revision + 1 END,
+         updated_at = CASE WHEN t.status = $2 THEN t.updated_at ELSE CURRENT_TIMESTAMP END
      FROM public.goal_plans gp
      WHERE t.id = $1
        AND gp.id = t.goal_plan_id

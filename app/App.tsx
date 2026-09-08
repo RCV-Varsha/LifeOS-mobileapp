@@ -20,7 +20,7 @@ export default function App() {
       {screen === 'today' ? (
         <TodayScreen onManageGoals={() => setScreen('goals')} onDailyReview={(date) => { setReviewDate(date); setScreen('dailyReview'); }} />
       ) : screen === 'dailyReview' && reviewDate ? (
-        <DailyReviewScreen date={reviewDate} onBack={() => setScreen('today')} />
+        <DailyReviewScreen date={reviewDate} onBack={() => setScreen('today')} onReplan={() => setScreen('today')} />
       ) : screen === 'goals' ? (
         <GoalsScreen
           onAddGoal={() => setScreen('addGoal')}

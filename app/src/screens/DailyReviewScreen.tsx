@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { DailyReviewRequestError, generateDailyReview, getDailyReview, type DailyReview, type ReviewMetrics } from '../services/dailyReviewService';
 
-type Props = { date: string; onBack: () => void };
+type Props = { date: string; onBack: () => void; onReplan: () => void };
 
 function Section({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) return null;
   return <View style={styles.section}><Text style={styles.sectionTitle}>{title}</Text>{items.map((item, index) => <Text key={`${title}-${index}`} style={styles.item}>• {item}</Text>)}</View>;
 }
 
-export default function DailyReviewScreen({ date, onBack }: Props) {
+export default function DailyReviewScreen({ date, onBack, onReplan }: Props) {
   const [metrics, setMetrics] = useState<ReviewMetrics | null>(null);
   const [review, setReview] = useState<DailyReview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,7 +48,7 @@ export default function DailyReviewScreen({ date, onBack }: Props) {
       {metrics.totalTasks === 0 ? <View style={styles.message}><Text style={styles.sectionTitle}>No tasks to review</Text><Text style={styles.muted}>There was no scheduled execution data for this date.</Text></View> : review ? <>
         <Text style={styles.aiSummary}>{review.insight.summary}</Text>
         <Section title="Observations" items={review.insight.observations} /><Section title="Strengths" items={review.insight.strengths} /><Section title="Areas to improve" items={review.insight.areasToImprove} />
-        <View style={styles.next}><Text style={styles.sectionTitle}>Recommended next action</Text><Text style={styles.item}>{review.insight.recommendedNextAction}</Text></View>
+        <View style={styles.next}><Text style={styles.sectionTitle}>Recommended next action</Text><Text style={styles.item}>{review.insight.recommendedNextAction}</Text><Text style={styles.muted}>Did your available time or priority change?</Text><Button title="Re-plan today" onPress={onReplan} /></View>
       </> : <View style={styles.message}><Text style={styles.sectionTitle}>Insight not generated yet</Text><Text style={styles.muted}>Generate a review when you are ready. It will use the execution snapshot shown above.</Text><Button title={isGenerating ? 'Generating…' : 'Generate AI insight'} onPress={() => void generate()} disabled={isGenerating} /></View>}
     </> : null}
     {error && metrics ? <Text style={styles.error}>{error}</Text> : null}

@@ -25,6 +25,24 @@ export class DailyReviewRepository {
   }
 
   async metricsForDate(reviewDate: { key: number }, timeZone: string) {
+    const date = new Date(reviewDate.key * 86_400_000).toISOString().slice(0, 10);
+    const dailyPlan = await this.pool.query<{ id: string }>(
+      `SELECT id FROM public.daily_plans WHERE owner_id = 'local' AND local_date = $1 AND time_zone = $2 AND active = TRUE`,
+      [date, timeZone],
+    );
+    if (dailyPlan.rows[0]) {
+      const adaptive = await this.pool.query<ReviewTask>(
+        `SELECT t.id, gp.goal_id AS "goalId", gp.goal_title AS "goalTitle", t.instruction,
+                dpi.allocated_minutes AS "plannedMinutes", t.status
+         FROM public.daily_plan_items dpi
+         INNER JOIN public.tasks t ON t.id = dpi.task_id
+         INNER JOIN public.goal_plans gp ON gp.id = t.goal_plan_id
+         WHERE dpi.daily_plan_id = $1
+         ORDER BY dpi.position`,
+        [dailyPlan.rows[0].id],
+      );
+      return calculateReviewMetrics(adaptive.rows);
+    }
     const result = await this.pool.query<TaskRow>(
       `SELECT t.id,
               gp.goal_id AS "goalId",
