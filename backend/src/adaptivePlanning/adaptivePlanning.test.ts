@@ -6,10 +6,12 @@ import { generateAdaptiveExplanation } from './groqExplanationService.ts';
 import { evaluateDailyPlan, validateEditedSelection } from './planner.ts';
 import type { PlanningTask } from './types.ts';
 import { AdaptiveConflictError } from './adaptivePlanningRepository.ts';
+import type { AdaptivePlanningContext } from '../context/types.ts';
 
 const originalFetch=globalThis.fetch;
 afterEach(()=>{globalThis.fetch=originalFetch;});
 function task(id:string,minutes:number|null,options:Partial<PlanningTask>={}):PlanningTask{return{id,goalId:'10000000-0000-4000-8000-000000000001',goalPlanId:'20000000-0000-4000-8000-000000000001',goalTitle:'Goal',instruction:`Task ${id}`,estimatedMinutes:minutes,status:'pending',goalPriority:0,planOrder:1,taskOrder:Number(id.at(-1))||1,revision:1,planVersion:1,...options};}
+function aiContext(tasks:PlanningTask[]):AdaptivePlanningContext{return{policy:'ADAPTIVE_PLANNING_V1',authorization:{userId:'00000000-0000-4000-8000-000000000001',basis:'AUTHENTICATED_CURRENT_USER'},situation:{date:'2026-09-08',timeZone:'UTC',availableMinutes:30,priorityTaskId:null},goals:[{id:'10000000-0000-4000-8000-000000000001',title:'Goal'}],tasks:tasks.map(({id,goalId,goalTitle,instruction,estimatedMinutes,status})=>({id,goalId,goalTitle,instruction,estimatedMinutes,status})),preferences:{maxMajorTasks:{value:null,reason:'test'},explanationLength:{value:'standard',reason:'test'}},memories:{dailyBufferMinutes:{value:0,reason:'test'}}};}
 
 test('planner handles zero tasks',()=>assert.deepEqual(evaluateDailyPlan([],30,null).selected,[]));
 test('one task fits',()=>assert.equal(evaluateDailyPlan([task('a',30)],30,null).currentPlanFits,true));
@@ -39,8 +41,8 @@ const raw={summary:'Focus on one task.',reason:'It fits the available capacity.'
 test('valid AI explanation is normalized',()=>assert.equal(validateAdaptiveExplanation(raw,new Set(['a'])).evidenceTaskIds[0],'a'));
 test('malformed AI explanation is rejected',()=>assert.throws(()=>validateAdaptiveExplanation({...raw,extra:true},new Set(['a']))));
 test('unsupported AI evidence is rejected',()=>assert.throws(()=>validateAdaptiveExplanation(raw,new Set(['b']))));
-test('Groq explanation returns only validated output',async()=>{process.env.GROQ_API_KEY='test';process.env.GROQ_MODEL='test';globalThis.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(raw)}}]}),{status:200});const result=await generateAdaptiveExplanation(evaluateDailyPlan([task('a',40)],30,null),[task('a',40)]);assert.equal(result.summary,raw.summary);});
-test('Groq failure rejects without changing deterministic evaluation',async()=>{process.env.GROQ_API_KEY='test';process.env.GROQ_MODEL='test';globalThis.fetch=async()=>new Response('{}',{status:503});const evaluation=evaluateDailyPlan([task('a',40)],30,null);await assert.rejects(()=>generateAdaptiveExplanation(evaluation,[task('a',40)]));assert.equal(evaluation.selected.length,0);});
+test('Groq explanation returns only validated assembled context',async()=>{process.env.GROQ_API_KEY='test';process.env.GROQ_MODEL='test';const tasks=[task('a',40)];globalThis.fetch=async(_url,init)=>{const request=JSON.parse(String(init?.body));assert.equal(request.messages[1].content.includes('authorization'),false);return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(raw)}}]}),{status:200});};const result=await generateAdaptiveExplanation(evaluateDailyPlan(tasks,30,null),aiContext(tasks));assert.equal(result.summary,raw.summary);});
+test('Groq failure rejects without changing deterministic evaluation',async()=>{process.env.GROQ_API_KEY='test';process.env.GROQ_MODEL='test';globalThis.fetch=async()=>new Response('{}',{status:503});const tasks=[task('a',40)];const evaluation=evaluateDailyPlan(tasks,30,null);await assert.rejects(()=>generateAdaptiveExplanation(evaluation,aiContext(tasks)));assert.equal(evaluation.selected.length,0);});
 
 const taskId='30000000-0000-4000-8000-000000000001';
 const proposalId='40000000-0000-4000-8000-000000000001';

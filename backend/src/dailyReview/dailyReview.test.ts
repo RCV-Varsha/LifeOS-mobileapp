@@ -5,6 +5,7 @@ import { calculateReviewMetrics, type DailyReviewMetrics, type ReviewTask } from
 import { parseReviewDate } from './date.ts';
 import { validateDailyReviewInsight } from './reviewSchema.ts';
 import { generateDailyReviewInsight } from './groqDailyReviewService.ts';
+import type { DailyReviewContext } from '../context/types.ts';
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
@@ -24,13 +25,14 @@ test('date validation rejects invalid dates', () => assert.equal(parseReviewDate
 test('date validation rejects future dates', () => assert.equal(parseReviewDate('2026-09-09', 'UTC', new Date('2026-09-08T12:00:00Z')), null));
 
 const rawInsight = { summary: 'A focused day.', observations: ['You finished one task.'], strengths: ['Follow-through'], areas_to_improve: ['Finish the remaining task.'], recommended_next_action: 'Start with the remaining task tomorrow.' };
+function aiContext(value:DailyReviewMetrics,length:'concise'|'standard'='standard'):DailyReviewContext{const {totalTasks,completedTasks,incompleteTasks,completionRate,goals,milestoneProgress}=value;return{policy:'DAILY_REVIEW_V1',authorization:{userId:'00000000-0000-4000-8000-000000000001',basis:'AUTHENTICATED_CURRENT_USER'},situation:{date:'2026-09-08',timeZone:'UTC'},execution:{totalTasks,completedTasks,incompleteTasks,completionRate,goals,milestoneProgress},preferences:{explanationLength:{value:length,reason:'test'}},memories:[]};}
 test('valid AI insight is normalized', () => assert.equal(validateDailyReviewInsight(rawInsight).areasToImprove[0], 'Finish the remaining task.'));
 test('malformed AI insight and invented statistic fields are rejected', () => assert.throws(() => validateDailyReviewInsight({ ...rawInsight, completion_rate: 100 })));
 
 test('Groq service returns only a validated insight', async () => {
   process.env.GROQ_API_KEY = 'test'; process.env.GROQ_MODEL = 'test-model';
-  globalThis.fetch = async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(rawInsight) } }] }), { status: 200 });
-  const result = await generateDailyReviewInsight(calculateReviewMetrics([task('completed')]));
+  globalThis.fetch = async (_url,init) => {const request=JSON.parse(String(init?.body));const payload=String(request.messages[1].content);assert.equal(payload.includes('authorization'),false);assert.equal(payload.includes('Read ten pages'),false);return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(rawInsight) } }] }), { status: 200 });};
+  const result = await generateDailyReviewInsight(aiContext(calculateReviewMetrics([task('completed')])));
   assert.equal(result.recommendedNextAction, rawInsight.recommended_next_action);
 });
 
@@ -38,7 +40,7 @@ type Review = { id: string; reviewDate: string; timeZone: string; metrics: Daily
 const metrics = calculateReviewMetrics([task('completed')]);
 function review(): Review { return { id: 'review-1', reviewDate: '2026-09-08', timeZone: 'UTC', metrics, insight: validateDailyReviewInsight(rawInsight), provider: 'groq', model: 'test-model', createdAt: new Date(), updatedAt: new Date() }; }
 
-async function apiRequest(repository: object, generate: (input: DailyReviewMetrics, explanationLength?: 'concise'|'standard') => Promise<ReturnType<typeof validateDailyReviewInsight>>, method = 'GET', date = '2026-09-08', explanationLength: 'concise'|'standard' = 'standard') {
+async function apiRequest(repository: object, generate: (input: DailyReviewContext) => Promise<ReturnType<typeof validateDailyReviewInsight>>, method = 'GET', date = '2026-09-08', explanationLength: 'concise'|'standard' = 'standard') {
   process.env.PGHOST = 'localhost'; process.env.PGPORT = '5432'; process.env.PGDATABASE = 'test'; process.env.PGUSER = 'test'; process.env.PGPASSWORD = 'test'; process.env.GROQ_API_KEY = 'test'; process.env.GROQ_MODEL = 'test-model';
   const { createDailyReviewRouter } = await import('../dailyReviewRoutes.ts');
   const app = express(); app.use(express.json()); app.use((req, _res, next) => { req.user = { id: '00000000-0000-4000-8000-000000000001', status: 'ACTIVE' }; next(); }); app.use(createDailyReviewRouter(repository as never, generate, () => new Date('2026-09-08T12:00:00Z'), { context: async () => ({ maxMajorTasks: null, explanationLength }) } as never));
@@ -83,6 +85,6 @@ test('API reports review persistence failure as a database error', async () => {
 test('Daily Review passes only the interaction length preference to AI', async () => {
   let received: string | undefined;
   const repository = { find: async () => null, metricsForDate: async () => metrics, save: async () => review() };
-  const response = await apiRequest(repository, async (_input, length) => { received = length; return validateDailyReviewInsight(rawInsight); }, 'POST', '2026-09-08', 'concise');
+  const response = await apiRequest(repository, async (input) => { received = input.preferences.explanationLength.value; return validateDailyReviewInsight(rawInsight); }, 'POST', '2026-09-08', 'concise');
   assert.equal(response.status, 201); assert.equal(received, 'concise');
 });

@@ -7,6 +7,7 @@ import { evaluateDailyPlan, validateEditedSelection } from './adaptivePlanning/p
 import { currentUser } from './auth.ts';
 import { PreferenceRepository } from './preferences/preferenceRepository.ts';
 import { MemoryRepository } from './memories/memoryRepository.ts';
+import { ContextAssembler } from './context/contextAssembler.ts';
 
 const uuidPattern=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const keyPattern=/^[A-Za-z0-9._:-]{8,200}$/;
@@ -20,6 +21,7 @@ export function createAdaptivePlanningRouter(
   now=()=>new Date(),
   preferences=new PreferenceRepository(pool),
   memories=new MemoryRepository(pool),
+  contexts=new ContextAssembler(preferences,memories),
 ){
   const router=Router();
 
@@ -46,23 +48,22 @@ export function createAdaptivePlanningRouter(
   });
 
   router.post('/daily-plans/:date/proposals',async(req,res)=>{
-    const ownerId=currentUser(req).id;
+    const user=currentUser(req);const ownerId=user.id;
     const {timeZone,date}=requestDate(req,now);const key=idempotencyKey(req);
     if(!timeZone||!date){res.status(400).json({error:'Provide a valid non-future date and IANA timeZone.'});return;}
     if(!key){res.status(400).json({error:'Provide a valid Idempotency-Key header.'});return;}
     if(req.body!==undefined&&(!object(req.body)||Object.keys(req.body).some((field)=>field!=='includeExplanation')||(req.body.includeExplanation!==undefined&&typeof req.body.includeExplanation!=='boolean'))){res.status(400).json({error:'Invalid proposal request.'});return;}
     const includeExplanation=!object(req.body)||req.body.includeExplanation!==false;
     try{
-      const preferenceContext=await preferences.context(ownerId,['PLANNING','INTERACTION']);
-      const memoryContext=await memories.planningContext(ownerId);
-      const hash=requestHash({date:date.isoDate,timeZone,includeExplanation,preferences:preferenceContext,memories:memoryContext});
       const context=await repository.getContext(ownerId,date.isoDate,timeZone);
       if(!context){res.status(409).json({error:'Save available time before requesting a proposal.',code:'context_required'});return;}
       const tasks=await repository.tasksForDate(ownerId,date,timeZone);
-      const evaluation=evaluateDailyPlan(tasks,context.availableMinutes,context.priorityTaskId,preferenceContext.maxMajorTasks,memoryContext.dailyBufferMinutes);
+      const assembled=await contexts.forAdaptivePlanning(user,{date:date.isoDate,timeZone,availableMinutes:context.availableMinutes,priorityTaskId:context.priorityTaskId,tasks});
+      const hash=requestHash({date:date.isoDate,timeZone,includeExplanation,preferences:assembled.preferences,memories:assembled.memories});
+      const evaluation=evaluateDailyPlan(tasks,context.availableMinutes,context.priorityTaskId,assembled.preferences.maxMajorTasks.value,assembled.memories.dailyBufferMinutes.value);
       if(evaluation.currentPlanFits){res.status(200).json({kind:'no_change',evaluation,tasks});return;}
       let explanation=null;let aiFallback=false;
-      if(includeExplanation&&process.env.GROQ_API_KEY&&process.env.GROQ_MODEL){try{explanation=await explain(evaluation,tasks,preferenceContext.explanationLength);}catch(error){aiFallback=true;console.error('Adaptive explanation unavailable:',error instanceof Error?error.name:'Unknown');}}
+      if(includeExplanation&&process.env.GROQ_API_KEY&&process.env.GROQ_MODEL){try{explanation=await explain(evaluation,assembled);}catch(error){aiFallback=true;console.error('Adaptive explanation unavailable:',error instanceof Error?error.name:'Unknown');}}
       else if(includeExplanation)aiFallback=true;
       const result=await repository.createProposal(ownerId,date.isoDate,timeZone,context,tasks,evaluation,explanation,key,hash);
       res.status(result.reused?200:201).json({kind:'proposal',...result,aiFallback});

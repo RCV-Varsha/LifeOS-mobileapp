@@ -12,6 +12,7 @@ organize their goals, tasks, habits, and plans.
 - Development identity → current-user authorization → isolated owned domain data.
 - Explicit preferences → corrections → scoped planning and explanation behavior.
 - Explicit memory → consent and corrections → deterministic planning constraint.
+- Feature request → authorized context assembly → bounded AI explanation or insight.
 
 ## Workspace
 
@@ -42,3 +43,6 @@ See `docs/user-preferences-and-corrections.md`, `docs/api/preferences.md`, and
 
 See `docs/explicit-memory-foundation.md`, `docs/api/memories.md`, and
 `docs/decisions/009-explicit-memory-foundation.md` for the V7 memory trust boundary.
+
+See `docs/context-intelligence.md` and
+`docs/decisions/010-feature-specific-context-assembly.md` for V8 context policies.

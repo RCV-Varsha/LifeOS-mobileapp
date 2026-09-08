@@ -6,6 +6,8 @@ import { DailyReviewRepository } from './dailyReview/dailyReviewRepository.ts';
 import { generateDailyReviewInsight } from './dailyReview/groqDailyReviewService.ts';
 import { currentUser } from './auth.ts';
 import { PreferenceRepository } from './preferences/preferenceRepository.ts';
+import { MemoryRepository } from './memories/memoryRepository.ts';
+import { ContextAssembler } from './context/contextAssembler.ts';
 
 const generations = new Map<string, Promise<unknown>>();
 
@@ -21,6 +23,7 @@ export function createDailyReviewRouter(
   generate = generateDailyReviewInsight,
   now = () => new Date(),
   preferences = new PreferenceRepository(pool),
+  contexts = new ContextAssembler(preferences,new MemoryRepository(pool)),
 ) {
   const router = Router();
 
@@ -54,7 +57,8 @@ export function createDailyReviewRouter(
   });
 
   router.post('/daily-reviews/:date', async (req, res) => {
-    const ownerId = currentUser(req).id;
+    const user = currentUser(req);
+    const ownerId = user.id;
     const { timeZone, date } = requestContext(req);
     if (!timeZone) {
       res.status(400).json({ error: 'Provide a valid IANA timeZone query parameter.' });
@@ -89,16 +93,16 @@ export function createDailyReviewRouter(
         res.status(503).json({ error: 'AI service is not configured.', code: 'ai_not_configured' });
         return;
       }
-      const preferenceContext = await preferences.context(ownerId, ['INTERACTION']).catch(() => {
+      const assembled = await contexts.forDailyReview(user,{date:date.isoDate,timeZone,metrics}).catch(() => {
         throw new DailyReviewDatabaseError();
       });
 
-      const key = `${ownerId}|${date.isoDate}|${timeZone}|${preferenceContext.explanationLength}`;
+      const key = `${ownerId}|${date.isoDate}|${timeZone}|${assembled.preferences.explanationLength.value}`;
       let generation = generations.get(key) as Promise<Awaited<ReturnType<typeof repository.save>>> | undefined;
       const created = !generation;
       if (!generation) {
         generation = (async () => {
-          const insight = await generate(metrics, preferenceContext.explanationLength);
+          const insight = await generate(assembled);
           return repository.save(ownerId, date.isoDate, timeZone, metrics, insight, process.env.GROQ_MODEL!).catch(() => {
             throw new DailyReviewDatabaseError();
           });
