@@ -10,6 +10,7 @@ organize their goals, tasks, habits, and plans.
 - Changed daily context → deterministic feasibility → user-approved adaptive plan → execution.
 - Goal → explicit desired outcome → milestones → optionally linked tasks, with activity and achievement progress kept distinct.
 - Development identity → current-user authorization → isolated owned domain data.
+- Explicit preferences → corrections → scoped planning and explanation behavior.
 
 ## Workspace
 
@@ -34,3 +35,6 @@ See `docs/goal-outcomes-and-milestones.md`, `docs/api/outcomes.md`, and
 
 See `docs/identity-and-ownership.md` for the development-only identity model,
 ownership constraints, migration behavior, and production-auth replacement boundary.
+
+See `docs/user-preferences-and-corrections.md`, `docs/api/preferences.md`, and
+`docs/decisions/008-controlled-user-preferences.md` for controlled personalization semantics.

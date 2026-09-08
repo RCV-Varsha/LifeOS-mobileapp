@@ -3,10 +3,10 @@ import { ActivityIndicator, Button, Pressable, ScrollView, StyleSheet, Text, Tex
 import { completeTask, getTodayTasks, uncompleteTask, type LifeTask } from '../services/taskService';
 import { acceptAdaptiveProposal, createAdaptiveProposal, editAdaptiveProposal, getDailyContext, newIdempotencyKey, rejectAdaptiveProposal, saveDailyContext, type AdaptiveProposal, type Selection } from '../services/adaptivePlanningService';
 
-type Props={onManageGoals:()=>void;onDailyReview:(date:string)=>void};
+type Props={onManageGoals:()=>void;onDailyReview:(date:string)=>void;onPreferences:()=>void};
 function progress(tasks:LifeTask[]){const completed=tasks.filter((task)=>task.status==='completed').length;return{completed,total:tasks.length,percent:tasks.length===0?0:Math.round(completed/tasks.length*100)};}
 
-export default function TodayScreen({onManageGoals,onDailyReview}:Props){
+export default function TodayScreen({onManageGoals,onDailyReview,onPreferences}:Props){
   const [tasks,setTasks]=useState<LifeTask[]>([]);const [date,setDate]=useState('');const [isLoading,setIsLoading]=useState(true);
   const [working,setWorking]=useState(false);const [updatingTaskId,setUpdatingTaskId]=useState<string|null>(null);const [error,setError]=useState('');const [notice,setNotice]=useState('');const [reload,setReload]=useState(0);
   const [available,setAvailable]=useState('');const [priorityTaskId,setPriorityTaskId]=useState<string|null>(null);const [blocker,setBlocker]=useState('');const [note,setNote]=useState('');
@@ -37,7 +37,7 @@ export default function TodayScreen({onManageGoals,onDailyReview}:Props){
       {proposal?<View style={styles.proposal}><Text style={styles.sectionTitle}>Proposed change</Text><Text style={styles.warning}>Not applied yet</Text>{proposal.explanation?<><Text style={styles.proposalSummary}>{proposal.explanation.summary}</Text><Text style={styles.muted}>{proposal.explanation.reason}</Text></>:null}<Text style={styles.label}>Choose tasks and allocations</Text>{proposal.eligibleTasks.map((task)=>{const selected=Object.hasOwn(draft,task.id);return <View key={`edit-${task.id}`} style={styles.editRow}><Pressable style={{flex:1}} onPress={()=>toggleSelection(task.id,task.estimatedMinutes)}><Text>{selected?'☑':'☐'} {task.instruction}</Text><Text style={styles.muted}>{task.estimatedMinutes===null?'Unknown estimate':`${task.estimatedMinutes} min estimate`}</Text></Pressable>{selected?<TextInput accessibilityLabel={`Allocation for ${task.instruction}`} style={styles.allocation} keyboardType="number-pad" value={draft[task.id]} onChangeText={(value)=>setDraft((current)=>({...current,[task.id]:value}))}/>:null}</View>;})}<Text style={styles.muted}>Draft allocation: {Object.values(draft).reduce((sum,value)=>sum+(Number(value)||0),0)} / {proposal.availableMinutes} min</Text>{proposal.conflicts.map((item,index)=><Text key={`conflict-${index}`} style={styles.error}>{item.message}</Text>)}{proposal.uncertainty.map((item)=><Text key={item.taskId} style={styles.warning}>{item.message}</Text>)}<View style={styles.buttons}><Button title="Save edits" onPress={()=>void saveEdits()} disabled={working}/><Button title="Accept" onPress={()=>void accept()} disabled={working}/><Button title="Reject" onPress={()=>void reject()} disabled={working}/></View></View>:null}
     </>}
     {notice?<Text style={styles.notice}>{notice}</Text>:null}{error&&tasks.length>0?<Text style={styles.error}>{error}</Text>:null}
-    <View style={styles.buttons}><Button title="Daily review" onPress={()=>onDailyReview(date)} disabled={isLoading||!date}/><Button title="Refresh" onPress={()=>setReload((v)=>v+1)} disabled={isLoading}/><Button title="Manage goals" onPress={onManageGoals}/></View>
+    <View style={styles.buttons}><Button title="Preferences" onPress={onPreferences}/><Button title="Daily review" onPress={()=>onDailyReview(date)} disabled={isLoading||!date}/><Button title="Refresh" onPress={()=>setReload((v)=>v+1)} disabled={isLoading}/><Button title="Manage goals" onPress={onManageGoals}/></View>
   </ScrollView>;
 }
 

@@ -38,10 +38,10 @@ type Review = { id: string; reviewDate: string; timeZone: string; metrics: Daily
 const metrics = calculateReviewMetrics([task('completed')]);
 function review(): Review { return { id: 'review-1', reviewDate: '2026-09-08', timeZone: 'UTC', metrics, insight: validateDailyReviewInsight(rawInsight), provider: 'groq', model: 'test-model', createdAt: new Date(), updatedAt: new Date() }; }
 
-async function apiRequest(repository: object, generate: (input: DailyReviewMetrics) => Promise<ReturnType<typeof validateDailyReviewInsight>>, method = 'GET', date = '2026-09-08') {
+async function apiRequest(repository: object, generate: (input: DailyReviewMetrics, explanationLength?: 'concise'|'standard') => Promise<ReturnType<typeof validateDailyReviewInsight>>, method = 'GET', date = '2026-09-08', explanationLength: 'concise'|'standard' = 'standard') {
   process.env.PGHOST = 'localhost'; process.env.PGPORT = '5432'; process.env.PGDATABASE = 'test'; process.env.PGUSER = 'test'; process.env.PGPASSWORD = 'test'; process.env.GROQ_API_KEY = 'test'; process.env.GROQ_MODEL = 'test-model';
   const { createDailyReviewRouter } = await import('../dailyReviewRoutes.ts');
-  const app = express(); app.use(express.json()); app.use((req, _res, next) => { req.user = { id: '00000000-0000-4000-8000-000000000001', status: 'ACTIVE' }; next(); }); app.use(createDailyReviewRouter(repository as never, generate, () => new Date('2026-09-08T12:00:00Z')));
+  const app = express(); app.use(express.json()); app.use((req, _res, next) => { req.user = { id: '00000000-0000-4000-8000-000000000001', status: 'ACTIVE' }; next(); }); app.use(createDailyReviewRouter(repository as never, generate, () => new Date('2026-09-08T12:00:00Z'), { context: async () => ({ maxMajorTasks: null, explanationLength }) } as never));
   const server = app.listen(0);
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No test address');
@@ -78,4 +78,11 @@ test('API reports review persistence failure as a database error', async () => {
   const repository = { find: async () => null, metricsForDate: async () => metrics, save: async () => { throw new Error('write failed'); } };
   const response = await apiRequest(repository, async () => validateDailyReviewInsight(rawInsight), 'POST');
   assert.equal(response.status, 500);
+});
+
+test('Daily Review passes only the interaction length preference to AI', async () => {
+  let received: string | undefined;
+  const repository = { find: async () => null, metricsForDate: async () => metrics, save: async () => review() };
+  const response = await apiRequest(repository, async (_input, length) => { received = length; return validateDailyReviewInsight(rawInsight); }, 'POST', '2026-09-08', 'concise');
+  assert.equal(response.status, 201); assert.equal(received, 'concise');
 });

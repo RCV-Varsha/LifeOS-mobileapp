@@ -5,6 +5,7 @@ import { parseReviewDate, validateTimeZone } from './dailyReview/date.ts';
 import { DailyReviewRepository } from './dailyReview/dailyReviewRepository.ts';
 import { generateDailyReviewInsight } from './dailyReview/groqDailyReviewService.ts';
 import { currentUser } from './auth.ts';
+import { PreferenceRepository } from './preferences/preferenceRepository.ts';
 
 const generations = new Map<string, Promise<unknown>>();
 
@@ -19,6 +20,7 @@ export function createDailyReviewRouter(
   repository = new DailyReviewRepository(pool),
   generate = generateDailyReviewInsight,
   now = () => new Date(),
+  preferences = new PreferenceRepository(pool),
 ) {
   const router = Router();
 
@@ -87,13 +89,16 @@ export function createDailyReviewRouter(
         res.status(503).json({ error: 'AI service is not configured.', code: 'ai_not_configured' });
         return;
       }
+      const preferenceContext = await preferences.context(ownerId, ['INTERACTION']).catch(() => {
+        throw new DailyReviewDatabaseError();
+      });
 
-      const key = `${ownerId}|${date.isoDate}|${timeZone}`;
+      const key = `${ownerId}|${date.isoDate}|${timeZone}|${preferenceContext.explanationLength}`;
       let generation = generations.get(key) as Promise<Awaited<ReturnType<typeof repository.save>>> | undefined;
       const created = !generation;
       if (!generation) {
         generation = (async () => {
-          const insight = await generate(metrics);
+          const insight = await generate(metrics, preferenceContext.explanationLength);
           return repository.save(ownerId, date.isoDate, timeZone, metrics, insight, process.env.GROQ_MODEL!).catch(() => {
             throw new DailyReviewDatabaseError();
           });

@@ -4,10 +4,12 @@ export function evaluateDailyPlan(
   tasks: PlanningTask[],
   availableMinutes: number,
   priorityTaskId: string | null,
+  maxMajorTasks: number | null = null,
 ): PlanEvaluation {
   if (!Number.isInteger(availableMinutes) || availableMinutes < 0 || availableMinutes > 1440) {
     throw new Error('Available minutes must be an integer from 0–1440');
   }
+  if (maxMajorTasks !== null && (!Number.isInteger(maxMajorTasks) || maxMajorTasks < 1 || maxMajorTasks > 10)) throw new Error('Maximum major tasks must be 1–10');
 
   const eligible = tasks.filter((task) => task.status === 'pending');
   const ranked = [...eligible].sort((left, right) => {
@@ -25,7 +27,8 @@ export function evaluateDailyPlan(
       taskId: task.id,
       message: `“${task.instruction}” has no reliable duration estimate.`,
     }));
-  const currentPlanFits = uncertainty.length === 0 && requiredMinutes <= availableMinutes;
+  const withinPreferredCount = maxMajorTasks === null || eligible.length <= maxMajorTasks;
+  const currentPlanFits = uncertainty.length === 0 && requiredMinutes <= availableMinutes && withinPreferredCount;
 
   if (currentPlanFits) {
     return {
@@ -49,7 +52,7 @@ export function evaluateDailyPlan(
       omittedTaskIds.push(task.id);
       continue;
     }
-    if (task.estimatedMinutes <= remainingMinutes) {
+    if (task.estimatedMinutes <= remainingMinutes && (maxMajorTasks === null || selected.length < maxMajorTasks)) {
       selected.push({ taskId: task.id, allocationMinutes: task.estimatedMinutes });
       remainingMinutes -= task.estimatedMinutes;
     } else {
@@ -69,6 +72,9 @@ export function evaluateDailyPlan(
       taskId: null,
       message: `The known work needs ${requiredMinutes} minutes, exceeding capacity by ${requiredMinutes - availableMinutes}.`,
     });
+  }
+  if (!withinPreferredCount) {
+    conflicts.push({ code: 'preference_task_limit', taskId: null, message: `Your preference limits adaptive plans to ${maxMajorTasks} major task${maxMajorTasks === 1 ? '' : 's'}.` });
   }
 
   return { availableMinutes, requiredMinutes, selected, omittedTaskIds, remainingMinutes, conflicts, uncertainty, currentPlanFits: false };

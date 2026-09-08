@@ -19,7 +19,7 @@ export type PlannedItem = {
 };
 
 export type PlanConflict = {
-  code: 'priority_does_not_fit' | 'insufficient_capacity';
+  code: 'priority_does_not_fit' | 'insufficient_capacity' | 'preference_task_limit';
   taskId: string | null;
   message: string;
 };
