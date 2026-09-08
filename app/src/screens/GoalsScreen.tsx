@@ -5,9 +5,10 @@ import { getGoals, type GoalSummary } from '../services/goalService';
 type GoalsScreenProps = {
   onAddGoal: () => void;
   onOpenGoal: (goalId: string) => void;
+  onToday: () => void;
 };
 
-export default function GoalsScreen({ onAddGoal, onOpenGoal }: GoalsScreenProps) {
+export default function GoalsScreen({ onAddGoal, onOpenGoal, onToday }: GoalsScreenProps) {
   const [goals, setGoals] = useState<GoalSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -77,6 +78,7 @@ export default function GoalsScreen({ onAddGoal, onOpenGoal }: GoalsScreenProps)
         onPress={() => setReload((value) => value + 1)}
       />
       <Button title="Add goal" onPress={onAddGoal} />
+      <Button title="Today's tasks" onPress={onToday} />
     </View>
   );
 }

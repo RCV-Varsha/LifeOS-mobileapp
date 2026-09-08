@@ -34,6 +34,9 @@ try {
     'Error type:',
     error instanceof Error ? error.name : 'Unknown',
   );
+  if (error instanceof Error) {
+    console.error('Message:', error.message);
+  }
 
   process.exitCode = 1;
 }

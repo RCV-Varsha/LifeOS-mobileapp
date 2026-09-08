@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import type { PoolClient } from 'pg';
 import { pool } from './db.ts';
 import {
   generateProposedPlan,
@@ -285,8 +286,43 @@ goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
     return;
   }
 
+  let client: PoolClient | undefined;
+
   try {
-    const result = await pool.query<{
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    const planResult = await client.query<{
+      id: string;
+      goalId: string;
+      minutesPerDay: number;
+      plan: unknown;
+    }>(
+      `SELECT gp.id,
+              gp.goal_id AS "goalId",
+              gp.minutes_per_day AS "minutesPerDay",
+              gp.plan
+       FROM public.goal_plans gp
+       INNER JOIN public.goals g ON g.id = gp.goal_id
+       WHERE gp.goal_id = $1
+       FOR UPDATE OF gp`,
+      [goalId],
+    );
+
+    const storedPlan = planResult.rows[0];
+
+    if (!storedPlan) {
+      await client.query('ROLLBACK');
+      res.status(404).json({ error: 'This goal does not have a plan.' });
+      return;
+    }
+
+    const validatedPlan = validateProposedPlan(
+      storedPlan.plan,
+      storedPlan.minutesPerDay,
+    );
+
+    const acceptedResult = await client.query<{
       id: string;
       goalId: string;
       status: 'accepted';
@@ -295,24 +331,95 @@ goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
       `UPDATE public.goal_plans
        SET status = 'accepted',
            accepted_at = COALESCE(accepted_at, CURRENT_TIMESTAMP)
-       WHERE goal_id = $1
+       WHERE id = $1
        RETURNING id,
                  goal_id AS "goalId",
                  status,
                  accepted_at AS "acceptedAt"`,
-      [goalId],
+      [storedPlan.id],
     );
 
-    const acceptedPlan = result.rows[0];
+    const tasks = validatedPlan.days.flatMap((day) =>
+      day.actions.map((action, index) => ({
+        dayNumber: day.day,
+        position: index + 1,
+        instruction: action.instruction,
+        plannedMinutes: action.minutes,
+      })),
+    );
 
-    if (!acceptedPlan) {
-      res.status(404).json({ error: 'This goal does not have a plan.' });
-      return;
+    for (const task of tasks) {
+      await client.query(
+        `INSERT INTO public.tasks (
+           goal_plan_id,
+           day_number,
+           position,
+           instruction,
+           planned_minutes
+         )
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (goal_plan_id, day_number, position) DO NOTHING`,
+        [
+          storedPlan.id,
+          task.dayNumber,
+          task.position,
+          task.instruction,
+          task.plannedMinutes,
+        ],
+      );
     }
 
-    res.status(200).json({ goalPlan: acceptedPlan });
-  } catch {
+    const storedTasks = await client.query<{
+      dayNumber: number;
+      position: number;
+      instruction: string;
+      plannedMinutes: number;
+    }>(
+      `SELECT day_number AS "dayNumber",
+              position,
+              instruction,
+              planned_minutes AS "plannedMinutes"
+       FROM public.tasks
+       WHERE goal_plan_id = $1
+       ORDER BY day_number, position`,
+      [storedPlan.id],
+    );
+
+    const tasksMatch =
+      storedTasks.rows.length === tasks.length &&
+      storedTasks.rows.every((task, index) => {
+        const expected = tasks[index];
+        return (
+          expected !== undefined &&
+          task.dayNumber === expected.dayNumber &&
+          task.position === expected.position &&
+          task.instruction === expected.instruction &&
+          task.plannedMinutes === expected.plannedMinutes
+        );
+      });
+
+    if (!tasksMatch) {
+      throw new Error('Stored tasks do not match the accepted plan');
+    }
+
+    await client.query('COMMIT');
+
+    res.status(200).json({
+      goalPlan: acceptedResult.rows[0],
+      taskCount: tasks.length,
+    });
+  } catch (error) {
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        console.error('Goal plan acceptance rollback failed.');
+      }
+    }
+
     console.error('Goal plan acceptance failed.');
     res.status(500).json({ error: 'Could not accept the goal plan.' });
+  } finally {
+    client?.release();
   }
 });

@@ -18,9 +18,10 @@ import {
 type Props = {
   goalId: string;
   onBack: () => void;
+  onToday: () => void;
 };
 
-export default function GoalPlanScreen({ goalId, onBack }: Props) {
+export default function GoalPlanScreen({ goalId, onBack, onToday }: Props) {
   const [goalPlan, setGoalPlan] = useState<GoalPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isWorking, setIsWorking] = useState(false);
@@ -141,7 +142,9 @@ export default function GoalPlanScreen({ goalId, onBack }: Props) {
               onPress={accept}
               disabled={isWorking}
             />
-          ) : null}
+          ) : (
+            <Button title="Go to today's tasks" onPress={onToday} />
+          )}
         </>
       ) : (
         <View style={styles.empty}>
