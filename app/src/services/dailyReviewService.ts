@@ -6,6 +6,7 @@ export type ReviewMetrics = {
   incompleteTasks: number;
   completionRate: number;
   goals: { id: string; title: string }[];
+  milestoneProgress: { goalId:string;goalTitle:string;outcomeTitle:string|null;completed:number;total:number;percent:number }[];
 };
 
 export type DailyReview = {
@@ -53,7 +54,9 @@ function parseMetrics(value: unknown): ReviewMetrics {
     completedTasks + incompleteTasks !== totalTasks ||
     completionRate !== (totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100))
   ) throw new Error('Inconsistent review metrics');
-  return { totalTasks, completedTasks, incompleteTasks, completionRate, goals };
+  if(value.milestoneProgress!==undefined&&!Array.isArray(value.milestoneProgress))throw new Error('Unexpected milestone progress');
+  const milestoneProgress=(value.milestoneProgress??[] as unknown[]).map((item)=>{if(!isObject(item)||typeof item.goalId!=='string'||typeof item.goalTitle!=='string'||!(item.outcomeTitle===null||typeof item.outcomeTitle==='string')||typeof item.completed!=='number'||typeof item.total!=='number'||typeof item.percent!=='number')throw new Error('Unexpected milestone progress');return item as ReviewMetrics['milestoneProgress'][number];});
+  return { totalTasks, completedTasks, incompleteTasks, completionRate, goals, milestoneProgress };
 }
 
 function textList(value: unknown) {

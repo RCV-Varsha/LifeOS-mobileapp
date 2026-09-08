@@ -4,7 +4,7 @@ import { getGoals, type GoalSummary } from '../services/goalService';
 
 type GoalsScreenProps = {
   onAddGoal: () => void;
-  onOpenGoal: (goalId: string) => void;
+  onOpenGoal: (goalId: string, goalTitle: string) => void;
   onToday: () => void;
 };
 
@@ -65,7 +65,7 @@ export default function GoalsScreen({ onAddGoal, onOpenGoal, onToday }: GoalsScr
               <Text style={styles.title}>{item.goal}</Text>
               <Text>{item.minutesPerDay} minutes per day</Text>
               <View style={styles.cardAction}>
-                <Button title="View plan" onPress={() => onOpenGoal(item.id)} />
+                <Button title="View goal" onPress={() => onOpenGoal(item.id,item.goal)} />
               </View>
             </View>
           )}

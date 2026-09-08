@@ -8,10 +8,12 @@ import DailyReviewScreen from './src/screens/DailyReviewScreen';
 export default function App() {
   const [screen, setScreen] = useState<'today' | 'goals' | 'addGoal' | 'goalPlan' | 'dailyReview'>('today');
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
+  const [selectedGoalTitle, setSelectedGoalTitle] = useState('');
   const [reviewDate, setReviewDate] = useState('');
 
-  function openGoalPlan(goalId: string) {
+  function openGoalPlan(goalId: string, goalTitle: string) {
     setSelectedGoalId(goalId);
+    setSelectedGoalTitle(goalTitle);
     setScreen('goalPlan');
   }
 
@@ -35,6 +37,7 @@ export default function App() {
       ) : selectedGoalId ? (
         <GoalPlanScreen
           goalId={selectedGoalId}
+          goalTitle={selectedGoalTitle}
           onBack={() => setScreen('goals')}
           onToday={() => setScreen('today')}
         />

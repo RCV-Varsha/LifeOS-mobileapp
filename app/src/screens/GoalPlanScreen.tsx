@@ -1,188 +1,36 @@
-import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Button,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import {
-  acceptGoalPlan,
-  generateGoalPlan,
-  getGoalPlan,
-  GoalPlanRequestError,
-  type GoalPlan,
-} from '../services/goalPlanService';
+import { useEffect,useState } from 'react';
+import { ActivityIndicator,Button,ScrollView,StyleSheet,Text,TextInput,View } from 'react-native';
+import { acceptGoalPlan,generateGoalPlan,getGoalPlan,GoalPlanRequestError,type GoalPlan } from '../services/goalPlanService';
+import { createMilestone,createOutcome,deleteMilestone,deleteOutcome,getMilestones,getOutcome,linkTaskMilestone,reorderMilestones,setMilestoneStatus,setOutcomeStatus,suggestOutcome,updateMilestone,updateOutcome,type GoalMilestone,type GoalOutcome,type OutcomeInput } from '../services/outcomeService';
+import { getGoalTasks,type GoalProgress,type LifeTask } from '../services/taskService';
 
-type Props = {
-  goalId: string;
-  onBack: () => void;
-  onToday: () => void;
-};
+type Props={goalId:string;goalTitle:string;onBack:()=>void;onToday:()=>void};
+const blank:OutcomeInput={title:'',description:'',targetValue:null,targetUnit:null,targetDate:null};
+function inputOf(value:GoalOutcome|GoalMilestone):OutcomeInput{return{title:value.title,description:value.description,targetValue:value.targetValue,targetUnit:value.targetUnit,targetDate:value.targetDate};}
 
-export default function GoalPlanScreen({ goalId, onBack, onToday }: Props) {
-  const [goalPlan, setGoalPlan] = useState<GoalPlan | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isWorking, setIsWorking] = useState(false);
-  const [error, setError] = useState('');
-  const [loadFailed, setLoadFailed] = useState(false);
-  const [reload, setReload] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    async function loadPlan() {
-      try {
-        setIsLoading(true);
-        setLoadFailed(false);
-        setError('');
-        const plan = await getGoalPlan(goalId, controller.signal);
-        if (active) setGoalPlan(plan);
-      } catch {
-        if (active) {
-          setLoadFailed(true);
-          setError('Could not load this plan. Check the backend connection.');
-        }
-      } finally {
-        clearTimeout(timeout);
-        if (active) setIsLoading(false);
-      }
-    }
-
-    void loadPlan();
-    return () => {
-      active = false;
-      clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [goalId, reload]);
-
-  async function generate() {
-    if (isWorking) return;
-    setIsWorking(true);
-    setError('');
-    try {
-      setGoalPlan(await generateGoalPlan(goalId));
-    } catch (requestError) {
-      if (
-        requestError instanceof GoalPlanRequestError &&
-        requestError.code === 'ai_rate_limited'
-      ) {
-        const retryText = requestError.retryAfterSeconds
-          ? ` Try again in about ${requestError.retryAfterSeconds} seconds.`
-          : ' Please try again shortly.';
-        setError(`The AI request limit was reached.${retryText}`);
-      } else if (requestError instanceof GoalPlanRequestError) {
-        setError(requestError.message);
-      } else {
-        setError('Could not reach the backend. Check your connection.');
-      }
-    } finally {
-      setIsWorking(false);
-    }
-  }
-
-  async function accept() {
-    if (!goalPlan || isWorking) return;
-    setIsWorking(true);
-    setError('');
-    try {
-      const accepted = await acceptGoalPlan(goalId);
-      setGoalPlan({
-        ...goalPlan,
-        status: accepted.status,
-        acceptedAt: accepted.acceptedAt,
-      });
-    } catch {
-      setError('Could not accept this plan. Please try again.');
-    } finally {
-      setIsWorking(false);
-    }
-  }
-
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Button title="Back to goals" onPress={onBack} disabled={isWorking} />
-
-      {isLoading ? (
-        <ActivityIndicator style={styles.loading} size="large" />
-      ) : loadFailed ? (
-        <View style={styles.empty}>
-          <Text style={styles.error}>{error}</Text>
-          <Button
-            title="Try again"
-            onPress={() => setReload((value) => value + 1)}
-          />
-        </View>
-      ) : goalPlan ? (
-        <>
-          <Text style={styles.heading}>{goalPlan.goalTitle}</Text>
-          <Text style={styles.summary}>{goalPlan.plan.summary}</Text>
-          <Text style={styles.status}>
-            {goalPlan.status === 'accepted' ? 'Accepted plan' : 'Proposed plan'}
-          </Text>
-
-          {goalPlan.plan.days.map((day) => (
-            <View key={day.day} style={styles.card}>
-              <Text style={styles.day}>Day {day.day}: {day.title}</Text>
-              {day.actions.map((action, index) => (
-                <Text key={`${day.day}-${index}`} style={styles.action}>
-                  • {action.instruction} ({action.minutes} min)
-                </Text>
-              ))}
-            </View>
-          ))}
-
-          {goalPlan.status === 'proposed' ? (
-            <Button
-              title={isWorking ? 'Accepting...' : 'Accept plan'}
-              onPress={accept}
-              disabled={isWorking}
-            />
-          ) : (
-            <Button title="Go to today's tasks" onPress={onToday} />
-          )}
-        </>
-      ) : (
-        <View style={styles.empty}>
-          <Text>No plan has been generated for this goal.</Text>
-          <Button
-            title={isWorking ? 'Generating...' : 'Generate AI plan'}
-            onPress={generate}
-            disabled={isWorking}
-          />
-        </View>
-      )}
-
-      {error && !loadFailed ? <Text style={styles.error}>{error}</Text> : null}
-    </ScrollView>
-  );
+export default function GoalPlanScreen({goalId,goalTitle,onBack,onToday}:Props){
+  const [goalPlan,setGoalPlan]=useState<GoalPlan|null>(null);const [outcome,setOutcome]=useState<GoalOutcome|null>(null);const [milestones,setMilestones]=useState<GoalMilestone[]>([]);const [tasks,setTasks]=useState<LifeTask[]>([]);const [progress,setProgress]=useState<GoalProgress|null>(null);
+  const [draft,setDraft]=useState<OutcomeInput>(blank);const [newMilestone,setNewMilestone]=useState('');const [isLoading,setIsLoading]=useState(true);const [working,setWorking]=useState(false);const [error,setError]=useState('');const [reload,setReload]=useState(0);
+  useEffect(()=>{let active=true;const controller=new AbortController();setIsLoading(true);setError('');Promise.all([getGoalPlan(goalId,controller.signal),getOutcome(goalId,controller.signal),getMilestones(goalId,controller.signal),getGoalTasks(goalId,controller.signal)]).then(([plan,result,items,taskResult])=>{if(!active)return;setGoalPlan(plan);setOutcome(result);setDraft(result?inputOf(result):blank);setMilestones(items);setTasks(taskResult.tasks);setProgress(taskResult.progress);}).catch(()=>{if(active)setError('Could not load this goal. Check the backend connection.');}).finally(()=>{if(active)setIsLoading(false);});return()=>{active=false;controller.abort();};},[goalId,reload]);
+  async function saveOutcome(){if(working)return;setWorking(true);setError('');try{const saved=outcome?await updateOutcome(goalId,draft,outcome.revision):await createOutcome(goalId,draft);setOutcome(saved);setDraft(inputOf(saved));}catch(reason){setError(reason instanceof Error?reason.message:'Could not save the outcome.');}finally{setWorking(false);}}
+  async function removeOutcome(){if(!outcome||working)return;setWorking(true);try{await deleteOutcome(goalId,outcome.revision);setOutcome(null);setDraft(blank);setMilestones([]);setReload((value)=>value+1);}catch(reason){setError(reason instanceof Error?reason.message:'Could not delete outcome.');}finally{setWorking(false);}}
+  async function aiSuggest(){setWorking(true);setError('');try{const suggestion=await suggestOutcome(goalId);setDraft({...blank,...suggestion.outcome});setNewMilestone(suggestion.milestones.map((item)=>item.title).join('\n'));}catch(reason){setError(`${reason instanceof Error?reason.message:'AI unavailable'} Manual entry remains available.`);}finally{setWorking(false);}}
+  async function addMilestones(){if(!outcome){setError('Save the desired outcome first.');return;}const titles=newMilestone.split('\n').map((item)=>item.trim()).filter(Boolean).slice(0,8);if(titles.length===0)return;setWorking(true);try{for(const title of titles)await createMilestone(goalId,{...blank,title});setNewMilestone('');setReload((value)=>value+1);}catch(reason){setError(reason instanceof Error?reason.message:'Could not add milestone.');}finally{setWorking(false);}}
+  async function updateStatus(item:GoalMilestone){setWorking(true);try{const saved=await setMilestoneStatus(item.id,item.status==='completed'?'not_started':'completed',item.revision);setMilestones((all)=>all.map((value)=>value.id===saved.id?saved:value));setReload((value)=>value+1);}catch(reason){setError(reason instanceof Error?reason.message:'Could not update milestone.');}finally{setWorking(false);}}
+  async function rename(item:GoalMilestone,title:string){try{const saved=await updateMilestone(item.id,{...inputOf(item),title},item.revision);setMilestones((all)=>all.map((value)=>value.id===saved.id?saved:value));}catch(reason){setError(reason instanceof Error?reason.message:'Could not edit milestone.');}}
+  async function remove(item:GoalMilestone){setWorking(true);try{await deleteMilestone(item.id,item.revision);setReload((value)=>value+1);}catch(reason){setError(reason instanceof Error?reason.message:'Could not delete milestone.');}finally{setWorking(false);}}
+  async function move(index:number,delta:number){const next=[...milestones];const other=index+delta;if(other<0||other>=next.length)return;[next[index],next[other]]=[next[other]!,next[index]!];setWorking(true);try{setMilestones(await reorderMilestones(goalId,next));}catch(reason){setError(reason instanceof Error?reason.message:'Could not reorder milestones.');}finally{setWorking(false);}}
+  async function generate(){setWorking(true);setError('');try{setGoalPlan(await generateGoalPlan(goalId));}catch(reason){setError(reason instanceof GoalPlanRequestError?reason.message:'Could not reach the backend.');}finally{setWorking(false);}}
+  async function accept(){if(!goalPlan)return;setWorking(true);try{const saved=await acceptGoalPlan(goalId);setGoalPlan({...goalPlan,status:saved.status,acceptedAt:saved.acceptedAt});setReload((value)=>value+1);}catch{setError('Could not accept this plan.');}finally{setWorking(false);}}
+  async function link(taskId:string,milestoneId:string|null){setWorking(true);try{await linkTaskMilestone(taskId,milestoneId);setReload((value)=>value+1);}catch(reason){setError(reason instanceof Error?reason.message:'Could not link task.');}finally{setWorking(false);}}
+  if(isLoading)return <View style={styles.loading}><ActivityIndicator size="large"/></View>;
+  return <ScrollView contentContainerStyle={styles.container}><Button title="Back to goals" onPress={onBack} disabled={working}/><Text style={styles.eyebrow}>GOAL</Text><Text style={styles.heading}>{goalPlan?.goalTitle??goalTitle}</Text>
+    <View style={styles.panel}><Text style={styles.section}>Desired outcome</Text>{!outcome?<Text style={styles.muted}>No outcome defined yet. Describe what meaningful success looks like.</Text>:<Text style={styles.status}>{outcome.status==='achieved'?'Achieved (explicitly confirmed)':'In progress'}</Text>}<TextInput style={styles.input} value={draft.title} onChangeText={(title)=>setDraft((value)=>({...value,title}))} placeholder="Build and deploy a small Python application" maxLength={200}/><TextInput style={[styles.input,styles.multiline]} value={draft.description} onChangeText={(description)=>setDraft((value)=>({...value,description}))} placeholder="Description (optional)" multiline maxLength={1000}/><View style={styles.row}><TextInput style={[styles.input,styles.flex]} value={draft.targetValue===null?'':String(draft.targetValue)} onChangeText={(value)=>setDraft((item)=>({...item,targetValue:value===''?null:Number(value)}))} placeholder="Target value" keyboardType="decimal-pad"/><TextInput style={[styles.input,styles.flex]} value={draft.targetUnit??''} onChangeText={(targetUnit)=>setDraft((item)=>({...item,targetUnit:targetUnit||null}))} placeholder="Unit" maxLength={40}/></View><TextInput style={styles.input} value={draft.targetDate??''} onChangeText={(targetDate)=>setDraft((item)=>({...item,targetDate:targetDate||null}))} placeholder="Target date YYYY-MM-DD"/><View style={styles.buttons}><Button title={outcome?'Save outcome':'Add outcome'} onPress={()=>void saveOutcome()} disabled={working}/><Button title="Suggest with AI" onPress={()=>void aiSuggest()} disabled={working}/>{outcome?<Button title={outcome.status==='achieved'?'Reopen outcome':'Mark outcome achieved'} onPress={()=>void setOutcomeStatus(goalId,outcome.status==='achieved'?'in_progress':'achieved',outcome.revision).then((saved)=>{setOutcome(saved);setDraft(inputOf(saved));}).catch((reason)=>setError(reason instanceof Error?reason.message:'Could not update outcome.'))} disabled={working}/>:null}{outcome?<Button title="Delete outcome" onPress={()=>void removeOutcome()} disabled={working}/>:null}</View></View>
+    <View style={styles.panel}><Text style={styles.section}>Progress</Text><Text style={styles.metric}>Activity: {progress?.activity.completed??0}/{progress?.activity.total??0} tasks ({progress?.activity.percent??0}%)</Text><Text style={styles.metric}>{progress?.milestone?`Milestones: ${progress.milestone.completed}/${progress.milestone.total} (${progress.milestone.percent}%)`:'Milestones: none — legacy activity progress is preserved'}</Text><Text style={styles.muted}>Task completion measures activity. Milestone completion measures intermediate achievement.</Text></View>
+    <Text style={styles.section}>Milestones</Text>{milestones.map((item,index)=><View key={item.id} style={styles.card}><TextInput style={styles.milestoneInput} defaultValue={item.title} onEndEditing={(event)=>{if(event.nativeEvent.text.trim()!==item.title)void rename(item,event.nativeEvent.text.trim());}}/><Text style={styles.muted}>{item.status.replace('_',' ')}</Text><View style={styles.row}><Button title={item.status==='completed'?'Reopen':'Complete'} onPress={()=>void updateStatus(item)} disabled={working}/><Button title="↑" onPress={()=>void move(index,-1)} disabled={working||index===0}/><Button title="↓" onPress={()=>void move(index,1)} disabled={working||index===milestones.length-1}/><Button title="Delete" onPress={()=>void remove(item)} disabled={working}/></View></View>)}{outcome?<><TextInput style={[styles.input,styles.multiline]} value={newMilestone} onChangeText={setNewMilestone} placeholder="Add milestones, one meaningful achievement per line" multiline/><Button title="Add milestones" onPress={()=>void addMilestones()} disabled={working}/></>:null}
+    <Text style={styles.section}>Current tasks</Text>{tasks.length===0?<Text style={styles.muted}>No accepted-plan tasks yet.</Text>:tasks.map((task)=><View key={task.id} style={styles.task}><Text>{task.status==='completed'?'✓':'○'} {task.instruction}</Text><Text style={styles.muted}>{task.milestoneTitle?`Supports milestone — ${task.milestoneTitle}`:'Not linked to a milestone'}{task.outcomeTitle?`\nFor outcome — ${task.outcomeTitle}`:''}</Text>{milestones.length>0?<View style={styles.linkRow}><Button title="None" onPress={()=>void link(task.id,null)} disabled={working||task.milestoneId===null}/>{milestones.map((item)=><Button key={item.id} title={item.sequence+'. '+item.title} onPress={()=>void link(task.id,item.id)} disabled={working||task.milestoneId===item.id}/>)}</View>:null}</View>)}
+    <Text style={styles.section}>Plan</Text>{goalPlan?<><Text style={styles.muted}>{goalPlan.plan.summary}</Text>{goalPlan.plan.days.map((day)=><View key={day.day} style={styles.card}><Text style={styles.day}>Day {day.day}: {day.title}</Text>{day.actions.map((action,index)=><Text key={index}>• {action.instruction} ({action.minutes} min)</Text>)}</View>)}{goalPlan.status==='proposed'?<Button title="Accept plan" onPress={()=>void accept()} disabled={working}/>:<Button title="Go to today's tasks" onPress={onToday}/>}</>:<Button title={working?'Generating…':'Generate AI plan'} onPress={()=>void generate()} disabled={working}/>} {error?<Text style={styles.error}>{error}</Text>:null}
+  </ScrollView>;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 56,
-    paddingBottom: 48,
-    backgroundColor: '#fff',
-  },
-  loading: { marginTop: 48 },
-  heading: { fontSize: 26, fontWeight: '700', marginTop: 24 },
-  summary: { fontSize: 16, lineHeight: 23, marginTop: 12, color: '#333' },
-  status: { fontWeight: '600', marginVertical: 20, color: '#246b45' },
-  card: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-  },
-  day: { fontSize: 17, fontWeight: '700', marginBottom: 10 },
-  action: { lineHeight: 21, marginBottom: 8 },
-  empty: { gap: 20, marginTop: 40 },
-  error: { color: '#b00020', marginTop: 20 },
-});
+const styles=StyleSheet.create({container:{flexGrow:1,paddingHorizontal:24,paddingTop:56,paddingBottom:48,backgroundColor:'#fff'},loading:{flex:1,justifyContent:'center'},eyebrow:{color:'#6b4ba1',fontWeight:'800',letterSpacing:1.4,marginTop:24},heading:{fontSize:28,fontWeight:'700',marginTop:6,marginBottom:18},panel:{padding:16,borderRadius:10,backgroundColor:'#f5f4f9',marginBottom:20,gap:9},section:{fontSize:20,fontWeight:'700',marginTop:20,marginBottom:10},status:{color:'#246b45',fontWeight:'700'},muted:{color:'#666',lineHeight:21},input:{borderWidth:1,borderColor:'#888',borderRadius:8,padding:11,fontSize:16,backgroundColor:'#fff',marginBottom:8},multiline:{minHeight:70,textAlignVertical:'top'},row:{flexDirection:'row',gap:8,alignItems:'center',flexWrap:'wrap'},linkRow:{gap:6,marginTop:9},flex:{flex:1,minWidth:110},buttons:{gap:8},metric:{fontSize:16,fontWeight:'600'},card:{borderWidth:1,borderColor:'#ddd',borderRadius:8,padding:14,marginBottom:10,gap:8},milestoneInput:{fontSize:17,fontWeight:'600',borderBottomWidth:1,borderBottomColor:'#ddd',paddingVertical:6},task:{padding:13,borderWidth:1,borderColor:'#ddd',borderRadius:8,marginBottom:8},day:{fontWeight:'700',fontSize:16},error:{color:'#b00020',marginTop:18}});

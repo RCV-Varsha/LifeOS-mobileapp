@@ -8,6 +8,7 @@ organize their goals, tasks, habits, and plans.
 - Goal → validated AI plan → accepted persistent tasks → daily execution.
 - Daily execution data → deterministic metrics → validated, persisted AI insight.
 - Changed daily context → deterministic feasibility → user-approved adaptive plan → execution.
+- Goal → explicit desired outcome → milestones → optionally linked tasks, with activity and achievement progress kept distinct.
 
 ## Workspace
 
@@ -26,3 +27,6 @@ See `docs/ai-daily-review-contract.md`, `docs/api/daily-reviews.md`, and
 
 See `docs/api/adaptive-planning.md` and
 `docs/decisions/006-adaptive-daily-planning.md` for Adaptive Daily Planning.
+
+See `docs/goal-outcomes-and-milestones.md`, `docs/api/outcomes.md`, and
+`docs/decisions/007-goal-outcomes-and-milestones.md` for outcome semantics.

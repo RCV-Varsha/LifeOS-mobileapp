@@ -19,6 +19,9 @@ export default function GoalOnboardingScreen({
   const [goal, setGoal] = useState('');
   const [reason, setReason] = useState('');
   const [minutes, setMinutes] = useState('20');
+  const [outcome, setOutcome] = useState('');
+  const [targetDate, setTargetDate] = useState('');
+  const [milestones, setMilestones] = useState('');
   const [error, setError] = useState('');
   const [isReviewing, setIsReviewing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -27,6 +30,7 @@ export default function GoalOnboardingScreen({
     const title = goal.trim();
     const why = reason.trim();
     const time = minutes.trim();
+    const desired = outcome.trim();
 
     if (title.length < 3 || title.length > 120) {
       setError('Enter a goal between 3 and 120 characters.');
@@ -42,10 +46,14 @@ export default function GoalOnboardingScreen({
       setError('Enter a whole number of minutes between 5 and 240.');
       return;
     }
+    if (desired.length > 0 && (desired.length < 3 || desired.length > 200)) { setError('Desired outcome must be 3–200 characters.'); return; }
+    if (targetDate && !/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) { setError('Target date must use YYYY-MM-DD.'); return; }
+    if (!desired && milestones.trim()) { setError('Define a desired outcome before adding milestones.'); return; }
 
     setGoal(title);
     setReason(why);
     setMinutes(String(Number(time)));
+    setOutcome(desired);
     setError('');
     setIsReviewing(true);
   }
@@ -61,6 +69,7 @@ export default function GoalOnboardingScreen({
       goal,
       reason,
       minutesPerDay: Number(minutes),
+      ...(outcome ? { desiredOutcome: { title: outcome, description: '', targetValue: null, targetUnit: null, targetDate: targetDate || null }, milestones: milestones.split('\n').map((item)=>item.trim()).filter(Boolean).slice(0,8).map((title)=>({ title, description:'', targetValue:null, targetUnit:null, targetDate:null })) } : {}),
     });
 
     setSavedId(id);
@@ -91,6 +100,10 @@ export default function GoalOnboardingScreen({
           <Text>{reason || 'Not provided'}</Text>
           <Text style={styles.label}>Daily time</Text>
           <Text>{minutes} minutes</Text>
+          <Text style={styles.label}>Desired outcome</Text>
+          <Text>{outcome || 'Not defined yet'}</Text>
+          {targetDate ? <><Text style={styles.label}>Target date</Text><Text>{targetDate}</Text></> : null}
+          {milestones.trim() ? <><Text style={styles.label}>Milestones</Text>{milestones.split('\n').filter((item)=>item.trim()).map((item,index)=><Text key={index}>{index+1}. {item.trim()}</Text>)}</> : null}
           {savedId ? (
   <>
     <Text style={styles.note} accessibilityLiveRegion="polite">
@@ -156,6 +169,13 @@ export default function GoalOnboardingScreen({
             onChangeText={setMinutes}
             keyboardType="number-pad"
           />
+
+          <Text style={styles.label}>What would meaningful success look like? (optional)</Text>
+          <TextInput accessibilityLabel="Desired outcome" style={[styles.input,styles.multiline]} value={outcome} onChangeText={setOutcome} placeholder="Build and deploy a small Python application" multiline maxLength={200}/>
+          <Text style={styles.label}>Outcome target date (optional)</Text>
+          <TextInput accessibilityLabel="Outcome target date" style={styles.input} value={targetDate} onChangeText={setTargetDate} placeholder="YYYY-MM-DD" maxLength={10}/>
+          <Text style={styles.label}>Milestones (optional, one per line)</Text>
+          <TextInput accessibilityLabel="Milestones, one per line" style={[styles.input,styles.multiline]} value={milestones} onChangeText={setMilestones} placeholder={'Learn fundamentals\nBuild the application\nDeploy it'} multiline/>
 
           {error ? (
             <Text style={styles.error} accessibilityLiveRegion="polite">

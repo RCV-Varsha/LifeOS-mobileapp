@@ -14,9 +14,10 @@ export type DailyReviewMetrics = {
   completionRate: number;
   goals: { id: string; title: string }[];
   tasks: ReviewTask[];
+  milestoneProgress: { goalId: string; goalTitle: string; outcomeTitle: string | null; completed: number; total: number; percent: number }[];
 };
 
-export function calculateReviewMetrics(tasks: ReviewTask[]): DailyReviewMetrics {
+export function calculateReviewMetrics(tasks: ReviewTask[], milestoneProgress: DailyReviewMetrics['milestoneProgress'] = []): DailyReviewMetrics {
   const completedTasks = tasks.filter((task) => task.status === 'completed').length;
   const goals = new Map<string, string>();
   for (const task of tasks) goals.set(task.goalId, task.goalTitle);
@@ -29,5 +30,6 @@ export function calculateReviewMetrics(tasks: ReviewTask[]): DailyReviewMetrics 
       tasks.length === 0 ? 0 : Math.round((completedTasks / tasks.length) * 100),
     goals: [...goals].map(([id, title]) => ({ id, title })),
     tasks,
+    milestoneProgress,
   };
 }

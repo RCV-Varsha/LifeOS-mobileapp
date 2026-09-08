@@ -15,6 +15,9 @@ export type LifeTask = {
   status: TaskStatus;
   createdAt: string;
   completedAt: string | null;
+  milestoneId: string | null;
+  milestoneTitle: string | null;
+  outcomeTitle: string | null;
 };
 
 export type TaskProgress = {
@@ -29,6 +32,7 @@ export type TodayTasks = {
   tasks: LifeTask[];
   progress: TaskProgress;
 };
+export type GoalProgress={activity:TaskProgress;milestone:TaskProgress|null;legacyPercent:number};
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -65,7 +69,8 @@ function parseTask(value: unknown): LifeTask {
     throw new Error('Unexpected task response');
   }
 
-  return { ...value, allocatedMinutes: typeof value.allocatedMinutes === 'number' ? value.allocatedMinutes : null } as LifeTask;
+  if (!(value.milestoneId===undefined||value.milestoneId===null||typeof value.milestoneId==='string')||!(value.milestoneTitle===undefined||value.milestoneTitle===null||typeof value.milestoneTitle==='string')||!(value.outcomeTitle===undefined||value.outcomeTitle===null||typeof value.outcomeTitle==='string')) throw new Error('Unexpected task context');
+  return { ...value, allocatedMinutes: typeof value.allocatedMinutes === 'number' ? value.allocatedMinutes : null, milestoneId:typeof value.milestoneId==='string'?value.milestoneId:null,milestoneTitle:typeof value.milestoneTitle==='string'?value.milestoneTitle:null,outcomeTitle:typeof value.outcomeTitle==='string'?value.outcomeTitle:null } as LifeTask;
 }
 
 function parseProgress(value: unknown): TaskProgress {
@@ -120,6 +125,12 @@ export async function getTodayTasks(signal: AbortSignal): Promise<TodayTasks> {
     tasks: data.tasks.map(parseTask),
     progress: parseProgress(data.progress),
   };
+}
+
+export async function getGoalTasks(goalId:string,signal:AbortSignal):Promise<{tasks:LifeTask[];progress:GoalProgress}>{
+  const response=await fetch(`${API_URL}/goals/${encodeURIComponent(goalId)}/tasks`,{signal});if(!response.ok)throw new Error(`Goal tasks returned HTTP ${response.status}`);const data:unknown=await response.json();
+  if(!isObject(data)||!Array.isArray(data.tasks)||!isObject(data.progress)||!isObject(data.progress.activity))throw new Error('Unexpected goal task response');
+  return{tasks:data.tasks.map(parseTask),progress:{activity:parseProgress(data.progress.activity),milestone:data.progress.milestone===null?null:parseProgress(data.progress.milestone),legacyPercent:data.progress.legacyPercent as number}};
 }
 
 async function changeTaskStatus(

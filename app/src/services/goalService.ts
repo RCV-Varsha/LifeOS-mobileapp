@@ -4,6 +4,8 @@ type GoalInput = {
   goal: string;
   reason: string;
   minutesPerDay: number;
+  desiredOutcome?: { title: string; description: string; targetValue: number | null; targetUnit: string | null; targetDate: string | null };
+  milestones?: { title: string; description: string; targetValue: null; targetUnit: null; targetDate: null }[];
 };
 
 export async function saveGoal(input: GoalInput): Promise<string> {

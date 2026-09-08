@@ -41,7 +41,7 @@ export class DailyReviewRepository {
          ORDER BY dpi.position`,
         [dailyPlan.rows[0].id],
       );
-      return calculateReviewMetrics(adaptive.rows);
+      return this.withMilestones(calculateReviewMetrics(adaptive.rows));
     }
     const result = await this.pool.query<TaskRow>(
       `SELECT t.id,
@@ -61,7 +61,20 @@ export class DailyReviewRepository {
     const tasks = result.rows
       .filter((task) => reviewDate.key - calendarDay(task.acceptedAt, timeZone).key + 1 === task.dayNumber)
       .map(({ acceptedAt: _acceptedAt, dayNumber: _dayNumber, ...task }) => task);
-    return calculateReviewMetrics(tasks);
+    return this.withMilestones(calculateReviewMetrics(tasks));
+  }
+
+  private async withMilestones(metrics: ReturnType<typeof calculateReviewMetrics>) {
+    if (metrics.goals.length === 0) return metrics;
+    const result = await this.pool.query<{ goalId:string;goalTitle:string;outcomeTitle:string|null;completed:number;total:number }>(
+      `SELECT g.id AS "goalId",g.title AS "goalTitle",o.title AS "outcomeTitle",
+       count(m.id) FILTER(WHERE m.status='completed')::int AS completed,count(m.id)::int AS total
+       FROM public.goals g LEFT JOIN public.goal_outcomes o ON o.goal_id=g.id
+       LEFT JOIN public.goal_milestones m ON m.goal_id=g.id AND m.owner_id=g.owner_id
+       WHERE g.owner_id='local' AND g.id=ANY($1::uuid[]) GROUP BY g.id,g.title,o.title ORDER BY g.title`,
+      [metrics.goals.map((goal)=>goal.id)],
+    );
+    return {...metrics,milestoneProgress:result.rows.filter((row)=>row.total>0).map((row)=>({...row,percent:Math.round(row.completed/row.total*100)}))};
   }
 
   async find(reviewDate: string, timeZone: string): Promise<DailyReview | null> {

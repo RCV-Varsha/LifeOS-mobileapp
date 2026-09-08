@@ -9,6 +9,7 @@ import {
   validateProposedPlan,
   type ProposedPlan,
 } from './ai/planSchema.ts';
+import { LOCAL_OWNER_ID } from './outcomes/types.ts';
 
 export const goalPlanRouter = Router();
 
@@ -51,8 +52,8 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
               reason,
               minutes_per_day AS "minutesPerDay"
        FROM public.goals
-       WHERE id = $1`,
-      [goalId],
+       WHERE id = $1 AND owner_id = $2`,
+      [goalId, LOCAL_OWNER_ID],
     );
 
     const goal = goalResult.rows[0];
@@ -87,8 +88,8 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
               generated_at AS "generatedAt",
               accepted_at AS "acceptedAt"
        FROM public.goal_plans
-       WHERE goal_id = $1`,
-      [goalId],
+       WHERE goal_id = $1 AND owner_id = $2`,
+      [goalId, LOCAL_OWNER_ID],
     );
 
     const storedPlan = existingPlan.rows[0];
@@ -139,9 +140,10 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
              minutes_per_day,
              plan,
              provider,
-             model
+             model,
+             owner_id
            )
-           VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7)
+           VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
            RETURNING id,
                      goal_id AS "goalId",
                      goal_title AS "goalTitle",
@@ -161,6 +163,7 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
             JSON.stringify(plan),
             'groq',
             model,
+            LOCAL_OWNER_ID,
           ],
         );
 
@@ -242,8 +245,8 @@ goalPlanRouter.get('/:goalId/plan', async (req, res) => {
               generated_at AS "generatedAt",
               accepted_at AS "acceptedAt"
        FROM public.goal_plans
-       WHERE goal_id = $1`,
-      [goalId],
+       WHERE goal_id = $1 AND owner_id = $2`,
+      [goalId, LOCAL_OWNER_ID],
     );
 
     const storedPlan = result.rows[0];
@@ -304,9 +307,9 @@ goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
               gp.plan
        FROM public.goal_plans gp
        INNER JOIN public.goals g ON g.id = gp.goal_id
-       WHERE gp.goal_id = $1
+       WHERE gp.goal_id = $1 AND gp.owner_id = $2 AND g.owner_id = $2
        FOR UPDATE OF gp`,
-      [goalId],
+      [goalId, LOCAL_OWNER_ID],
     );
 
     const storedPlan = planResult.rows[0];
@@ -355,9 +358,10 @@ goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
            day_number,
            position,
            instruction,
-           planned_minutes
+           planned_minutes,
+           owner_id
          )
-         VALUES ($1, $2, $3, $4, $5)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (goal_plan_id, day_number, position) DO NOTHING`,
         [
           storedPlan.id,
@@ -365,6 +369,7 @@ goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
           task.position,
           task.instruction,
           task.plannedMinutes,
+          LOCAL_OWNER_ID,
         ],
       );
     }

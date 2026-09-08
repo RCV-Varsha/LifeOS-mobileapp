@@ -13,11 +13,11 @@ function task(status: 'pending' | 'completed', id = crypto.randomUUID()): Review
   return { id, goalId: 'goal-1', goalTitle: 'Read', instruction: 'Read ten pages', plannedMinutes: 20, status };
 }
 
-test('metrics handle zero tasks', () => assert.deepEqual(calculateReviewMetrics([]), { totalTasks: 0, completedTasks: 0, incompleteTasks: 0, completionRate: 0, goals: [], tasks: [] }));
+test('metrics handle zero tasks', () => assert.deepEqual(calculateReviewMetrics([]), { totalTasks: 0, completedTasks: 0, incompleteTasks: 0, completionRate: 0, goals: [], tasks: [], milestoneProgress: [] }));
 test('metrics handle all completed tasks', () => assert.equal(calculateReviewMetrics([task('completed'), task('completed')]).completionRate, 100));
 test('metrics handle partially completed tasks', () => {
   const result = calculateReviewMetrics([task('completed'), task('pending')]);
-  assert.deepEqual({ ...result, tasks: [] }, { totalTasks: 2, completedTasks: 1, incompleteTasks: 1, completionRate: 50, goals: [{ id: 'goal-1', title: 'Read' }], tasks: [] });
+  assert.deepEqual({ ...result, tasks: [] }, { totalTasks: 2, completedTasks: 1, incompleteTasks: 1, completionRate: 50, goals: [{ id: 'goal-1', title: 'Read' }], tasks: [], milestoneProgress: [] });
 });
 test('metrics handle no completed tasks', () => assert.equal(calculateReviewMetrics([task('pending'), task('pending')]).completionRate, 0));
 test('date validation rejects invalid dates', () => assert.equal(parseReviewDate('2026-02-30', 'UTC', new Date('2026-09-08T00:00:00Z')), null));
