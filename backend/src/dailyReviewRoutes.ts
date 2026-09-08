@@ -4,6 +4,7 @@ import { GroqRequestError } from './ai/groqPlanService.ts';
 import { parseReviewDate, validateTimeZone } from './dailyReview/date.ts';
 import { DailyReviewRepository } from './dailyReview/dailyReviewRepository.ts';
 import { generateDailyReviewInsight } from './dailyReview/groqDailyReviewService.ts';
+import { currentUser } from './auth.ts';
 
 const generations = new Map<string, Promise<unknown>>();
 
@@ -28,6 +29,7 @@ export function createDailyReviewRouter(
   }
 
   router.get('/daily-reviews/:date', async (req, res) => {
+    const ownerId = currentUser(req).id;
     const { timeZone, date } = requestContext(req);
     if (!timeZone) {
       res.status(400).json({ error: 'Provide a valid IANA timeZone query parameter.' });
@@ -39,8 +41,8 @@ export function createDailyReviewRouter(
     }
 
     try {
-      const review = await repository.find(date.isoDate, timeZone);
-      const metrics = review?.metrics ?? await repository.metricsForDate(date, timeZone);
+      const review = await repository.find(ownerId, date.isoDate, timeZone);
+      const metrics = review?.metrics ?? await repository.metricsForDate(ownerId, date, timeZone);
       res.set('Cache-Control', 'no-store');
       res.status(200).json({ date: date.isoDate, timeZone, metrics, review });
     } catch {
@@ -50,6 +52,7 @@ export function createDailyReviewRouter(
   });
 
   router.post('/daily-reviews/:date', async (req, res) => {
+    const ownerId = currentUser(req).id;
     const { timeZone, date } = requestContext(req);
     if (!timeZone) {
       res.status(400).json({ error: 'Provide a valid IANA timeZone query parameter.' });
@@ -65,7 +68,7 @@ export function createDailyReviewRouter(
     }
 
     try {
-      const existing = await repository.find(date.isoDate, timeZone).catch(() => {
+      const existing = await repository.find(ownerId, date.isoDate, timeZone).catch(() => {
         throw new DailyReviewDatabaseError();
       });
       if (existing) {
@@ -73,7 +76,7 @@ export function createDailyReviewRouter(
         return;
       }
 
-      const metrics = await repository.metricsForDate(date, timeZone).catch(() => {
+      const metrics = await repository.metricsForDate(ownerId, date, timeZone).catch(() => {
         throw new DailyReviewDatabaseError();
       });
       if (metrics.totalTasks === 0) {
@@ -85,13 +88,13 @@ export function createDailyReviewRouter(
         return;
       }
 
-      const key = `${date.isoDate}|${timeZone}`;
+      const key = `${ownerId}|${date.isoDate}|${timeZone}`;
       let generation = generations.get(key) as Promise<Awaited<ReturnType<typeof repository.save>>> | undefined;
       const created = !generation;
       if (!generation) {
         generation = (async () => {
           const insight = await generate(metrics);
-          return repository.save(date.isoDate, timeZone, metrics, insight, process.env.GROQ_MODEL!).catch(() => {
+          return repository.save(ownerId, date.isoDate, timeZone, metrics, insight, process.env.GROQ_MODEL!).catch(() => {
             throw new DailyReviewDatabaseError();
           });
         })();

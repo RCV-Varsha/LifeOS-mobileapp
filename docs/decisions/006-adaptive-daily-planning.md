@@ -36,8 +36,8 @@ The trust boundary is deliberate:
 Daily records use `(owner_id, local_date, time_zone)`. `local_date` is a calendar
 date, timezone is validated as an IANA identifier, and lifecycle timestamps are
 UTC-capable `TIMESTAMPTZ` values. A timezone change creates a different daily
-identity and never rewrites history. The current local prototype assigns the
-server-controlled owner `local`; clients cannot submit an owner ID. This is an
+identity and never rewrites history. The identity foundation now assigns the
+centrally resolved development user; clients cannot submit an owner ID. This is an
 explicit boundary, not production authentication.
 
 ## Duration and planning
@@ -109,7 +109,7 @@ only achievement signal, and adaptive allocation never increases progress.
 
 ## Deliberate limits
 
-- local single-owner prototype; no authentication;
+- development-only authentication (not production authentication);
 - goal priority exists as a backend-ready field but has no editing UI yet;
 - source plan actions always have known estimates today, though the planner safely
   represents future unknown estimates;

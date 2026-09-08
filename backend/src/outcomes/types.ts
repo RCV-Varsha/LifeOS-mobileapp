@@ -1,5 +1,3 @@
-export const LOCAL_OWNER_ID = 'local';
-
 export type OutcomeStatus = 'in_progress' | 'achieved';
 export type MilestoneStatus = 'not_started' | 'in_progress' | 'completed';
 

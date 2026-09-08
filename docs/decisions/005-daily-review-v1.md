@@ -20,8 +20,8 @@ task or progress model is introduced.
 
 `daily_reviews` stores a deterministic metrics JSON snapshot beside the
 validated insight, provider/model provenance, date/timezone key, and timestamps.
-`UNIQUE (review_date, time_zone)` prevents duplicate persisted reviews in this
-single-owner prototype. The in-process generation map also coalesces concurrent
+Migration 007 replaced the original uniqueness rule with
+`UNIQUE (owner_id, review_date, time_zone)`. The in-process generation map also coalesces concurrent
 requests in one backend process. A future multi-instance deployment should add
 a distributed generation lock or idempotency mechanism if eliminating duplicate
 provider calls across instances is required.
@@ -36,5 +36,6 @@ Zero-task dates do not call AI. SQL values are parameterized. Stored insights
 are revalidated on read, errors returned to clients are generic, and provider
 credentials never cross the backend boundary.
 
-Without users/authentication, date/timezone is the review ownership key. This is
-appropriate only for the existing local prototype.
+This historical limitation was superseded by migration 007. Reviews are now
+owned and queried by the centrally resolved development user; production
+authentication remains deferred.

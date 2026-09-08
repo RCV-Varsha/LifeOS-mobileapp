@@ -1,5 +1,3 @@
-export const LOCAL_OWNER_ID = 'local';
-
 export type PlanningTask = {
   id: string;
   goalId: string;

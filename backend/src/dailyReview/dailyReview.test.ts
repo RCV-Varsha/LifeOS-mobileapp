@@ -41,7 +41,7 @@ function review(): Review { return { id: 'review-1', reviewDate: '2026-09-08', t
 async function apiRequest(repository: object, generate: (input: DailyReviewMetrics) => Promise<ReturnType<typeof validateDailyReviewInsight>>, method = 'GET', date = '2026-09-08') {
   process.env.PGHOST = 'localhost'; process.env.PGPORT = '5432'; process.env.PGDATABASE = 'test'; process.env.PGUSER = 'test'; process.env.PGPASSWORD = 'test'; process.env.GROQ_API_KEY = 'test'; process.env.GROQ_MODEL = 'test-model';
   const { createDailyReviewRouter } = await import('../dailyReviewRoutes.ts');
-  const app = express(); app.use(express.json()); app.use(createDailyReviewRouter(repository as never, generate, () => new Date('2026-09-08T12:00:00Z')));
+  const app = express(); app.use(express.json()); app.use((req, _res, next) => { req.user = { id: '00000000-0000-4000-8000-000000000001', status: 'ACTIVE' }; next(); }); app.use(createDailyReviewRouter(repository as never, generate, () => new Date('2026-09-08T12:00:00Z')));
   const server = app.listen(0);
   await new Promise<void>((resolve) => server.once('listening', resolve));
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No test address');

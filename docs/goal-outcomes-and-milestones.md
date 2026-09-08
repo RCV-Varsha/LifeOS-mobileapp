@@ -24,7 +24,7 @@ V1 uses explicit user confirmation for milestone completion and outcome achievem
 
 Each goal may have one `goal_outcomes` row and zero to 100 ordered `goal_milestones` rows. The mobile flow currently limits initial and AI-created milestone drafts to eight. Outcomes may be qualitative or measurable; a measurable target stores a non-negative value and required unit. A target does not constitute evidence.
 
-Every new row repeats the existing `owner_id` boundary. The API derives the V1 owner (`local`) on the backend; it never accepts owner identity from a request. Composite foreign keys keep a milestone with its outcome, goal, and owner. A database trigger rejects a task-to-milestone link unless the task plan and milestone share a goal and owner. SQL is parameterized.
+Every new row repeats the `owner_id` boundary. The API derives the current development user through centralized middleware; it never accepts owner identity from a request. Composite foreign keys keep a milestone with its outcome, goal, and owner. A database trigger rejects a task-to-milestone link unless the task plan and milestone share a goal and owner. SQL is parameterized.
 
 Deleting an outcome cascades only its milestones. Each affected task's nullable `milestone_id` becomes `NULL`; task and plan records remain intact. Deleting a goal retains the existing cascade behavior.
 
@@ -77,5 +77,5 @@ Migration `006_create_goal_outcomes_and_milestones.sql` creates both domain tabl
 - Goal health is deferred. Current data does not establish a reliable expected trajectory, so `ON_TRACK`/`AT_RISK` would fabricate confidence.
 - Outcome evidence capture and automatic verification are deferred.
 - Plan generation does not invent or persist milestone links. Users can link accepted tasks explicitly after plan acceptance.
-- V1 remains a local-owner system; production authentication and multi-user identity are outside this slice.
+- Authentication remains development-only; production authentication is outside this slice. The ownership model now safely represents multiple internal users.
 - No milestone weighting, habit tracking, calendar integration, embeddings, memory, or autonomous action is introduced.

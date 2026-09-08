@@ -1,7 +1,7 @@
 # Adaptive Planning API
 
-All endpoints are local-prototype operations for the server-controlled `local`
-owner. Dates must be real, non-future `YYYY-MM-DD` values and `timeZone` must be a
+All endpoints require the centrally resolved development identity and operate on
+the current user's data. Dates must be real, non-future `YYYY-MM-DD` values and `timeZone` must be a
 valid IANA timezone.
 
 - `GET /daily-contexts/:date?timeZone=...` loads context or returns `context: null`.

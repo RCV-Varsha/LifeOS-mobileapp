@@ -1,8 +1,8 @@
 # Task execution API
 
-These endpoints support the local LifeOS prototype. They validate input and
-database relationships, but they do not authenticate users or enforce
-ownership. Do not expose them as a public production API.
+These endpoints require the centrally resolved development identity and scope
+task access by the current user. This is not production authentication; do not
+expose it as a public production API.
 
 ## Accept a plan and create tasks
 

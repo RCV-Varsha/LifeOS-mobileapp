@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { pool } from './db.ts';
 import { calendarDay, validateTimeZone } from './dailyReview/date.ts';
 import { goalProgress } from './outcomes/progress.ts';
-import { LOCAL_OWNER_ID } from './outcomes/types.ts';
+import { currentUser } from './auth.ts';
 
 export const taskRouter = Router();
 
@@ -71,6 +71,7 @@ const taskFrom = `FROM public.tasks t
                   LEFT JOIN public.goal_outcomes go2 ON go2.goal_id = gp.goal_id`;
 
 taskRouter.get('/goals/:goalId/tasks', async (req, res) => {
+  const ownerId = currentUser(req).id;
   const goalId = req.params.goalId;
 
   if (typeof goalId !== 'string' || !uuidPattern.test(goalId)) {
@@ -81,7 +82,7 @@ taskRouter.get('/goals/:goalId/tasks', async (req, res) => {
   try {
     const goal = await pool.query<{ exists: boolean }>(
       'SELECT EXISTS (SELECT 1 FROM public.goals WHERE id = $1 AND owner_id = $2) AS "exists"',
-      [goalId, LOCAL_OWNER_ID],
+      [goalId, ownerId],
     );
 
     if (!goal.rows[0]?.exists) {
@@ -96,9 +97,9 @@ taskRouter.get('/goals/:goalId/tasks', async (req, res) => {
          AND t.owner_id = $2 AND gp.owner_id = $2
          AND gp.status = 'accepted'
        ORDER BY t.day_number, t.position`,
-      [goalId, LOCAL_OWNER_ID],
+      [goalId, ownerId],
     );
-    const milestones = await pool.query<{ status: string }>('SELECT status FROM public.goal_milestones WHERE goal_id=$1 AND owner_id=$2', [goalId, LOCAL_OWNER_ID]);
+    const milestones = await pool.query<{ status: string }>('SELECT status FROM public.goal_milestones WHERE goal_id=$1 AND owner_id=$2', [goalId, ownerId]);
 
     res.set('Cache-Control', 'no-store');
     res.status(200).json({
@@ -112,6 +113,7 @@ taskRouter.get('/goals/:goalId/tasks', async (req, res) => {
 });
 
 taskRouter.get('/tasks/today', async (req, res) => {
+  const ownerId = currentUser(req).id;
   const timeZone = validateTimeZone(req.query.timeZone);
 
   if (!timeZone) {
@@ -125,7 +127,7 @@ taskRouter.get('/tasks/today', async (req, res) => {
     const today = calendarDay(new Date(), timeZone);
     const dailyPlan = await pool.query<{ id: string }>(
       `SELECT id FROM public.daily_plans WHERE owner_id=$3 AND local_date=$1 AND time_zone=$2 AND active=TRUE`,
-      [today.isoDate,timeZone,LOCAL_OWNER_ID],
+      [today.isoDate,timeZone,ownerId],
     );
     const adaptive = await pool.query<StoredTask & { allocatedMinutes: number }>(
       `SELECT t.id,gp.goal_id AS "goalId",t.goal_plan_id AS "goalPlanId",gp.goal_title AS "goalTitle",
@@ -135,7 +137,7 @@ taskRouter.get('/tasks/today', async (req, res) => {
        FROM public.daily_plans dp INNER JOIN public.daily_plan_items dpi ON dpi.daily_plan_id=dp.id
        INNER JOIN public.tasks t ON t.id=dpi.task_id INNER JOIN public.goal_plans gp ON gp.id=t.goal_plan_id
        LEFT JOIN public.goal_milestones gm ON gm.id=t.milestone_id LEFT JOIN public.goal_outcomes go2 ON go2.goal_id=gp.goal_id
-       WHERE dp.owner_id=$3 AND t.owner_id=$3 AND gp.owner_id=$3 AND dp.local_date=$1 AND dp.time_zone=$2 ORDER BY dpi.position`,[today.isoDate,timeZone,LOCAL_OWNER_ID]);
+       WHERE dp.owner_id=$3 AND dpi.owner_id=$3 AND t.owner_id=$3 AND gp.owner_id=$3 AND dp.local_date=$1 AND dp.time_zone=$2 ORDER BY dpi.position`,[today.isoDate,timeZone,ownerId]);
     const result = dailyPlan.rows.length>0?null:await pool.query<StoredTask & { acceptedAt: Date; allocatedMinutes:null }>(
       `${taskColumns},
               gp.accepted_at AS "acceptedAt"
@@ -144,7 +146,7 @@ taskRouter.get('/tasks/today', async (req, res) => {
          AND t.owner_id = $1 AND gp.owner_id = $1
          AND gp.accepted_at IS NOT NULL
        ORDER BY gp.accepted_at DESC, gp.goal_id, t.day_number, t.position`,
-      [LOCAL_OWNER_ID],
+      [ownerId],
     );
 
     const tasks = dailyPlan.rows.length>0?adaptive.rows:result!.rows.filter((task) => {
@@ -172,6 +174,7 @@ taskRouter.get('/tasks/today', async (req, res) => {
 async function setTaskCompletion(
   taskId: string,
   completed: boolean,
+  ownerId: string,
 ): Promise<StoredTask | null> {
   const result = await pool.query<StoredTask>(
     `UPDATE public.tasks t
@@ -201,7 +204,7 @@ async function setTaskCompletion(
                t.milestone_id AS "milestoneId",
                (SELECT title FROM public.goal_milestones WHERE id=t.milestone_id) AS "milestoneTitle",
                (SELECT title FROM public.goal_outcomes WHERE goal_id=gp.goal_id AND owner_id=$3) AS "outcomeTitle"`,
-    [taskId, completed ? 'completed' : 'pending', LOCAL_OWNER_ID],
+    [taskId, completed ? 'completed' : 'pending', ownerId],
   );
 
   return result.rows[0] ?? null;
@@ -221,7 +224,7 @@ taskRouter.post('/tasks/:taskId/complete', async (req, res) => {
   }
 
   try {
-    const task = await setTaskCompletion(taskId, true);
+    const task = await setTaskCompletion(taskId, true, currentUser(req).id);
 
     if (!task) {
       res.status(404).json({ error: 'Task not found.' });
@@ -249,7 +252,7 @@ taskRouter.post('/tasks/:taskId/uncomplete', async (req, res) => {
   }
 
   try {
-    const task = await setTaskCompletion(taskId, false);
+    const task = await setTaskCompletion(taskId, false, currentUser(req).id);
 
     if (!task) {
       res.status(404).json({ error: 'Task not found.' });

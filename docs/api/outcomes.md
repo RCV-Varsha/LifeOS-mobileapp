@@ -1,6 +1,6 @@
 # Outcomes and milestones API
 
-All routes operate on the backend-derived V1 owner `local`. UUID resources belonging to another owner are reported as not found.
+All routes operate on the backend-resolved current development user. UUID resources belonging to another user are reported as not found. Clients cannot submit ownership fields.
 
 ## Outcome
 

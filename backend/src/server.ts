@@ -6,7 +6,7 @@ import { dailyReviewRouter } from './dailyReviewRoutes.ts';
 import { adaptivePlanningRouter } from './adaptivePlanningRoutes.ts';
 import { outcomeRouter } from './outcomeRoutes.ts';
 import { validateMilestoneInput, validateOutcomeInput } from './outcomes/validation.ts';
-import { LOCAL_OWNER_ID } from './outcomes/types.ts';
+import { currentUser, developmentAuthentication, rejectClientOwnership } from './auth.ts';
 
 
 const app=express()
@@ -17,12 +17,23 @@ const port = Number.isInteger(configuredPort) && configuredPort > 0 && configure
   ? configuredPort
   : 3000;
 app.use(express.json({ limit: '10kb' }));
+app.get('/health',(req,res)=>{
+    res.status(200).json({ status:'ok' })
+})
+app.use(rejectClientOwnership);
+app.use(developmentAuthentication(pool));
+app.get('/me', (req, res) => {
+  const user = currentUser(req);
+  res.set('Cache-Control', 'no-store');
+  res.status(200).json({ user });
+});
 app.use(taskRouter);
 app.use(dailyReviewRouter);
 app.use(adaptivePlanningRouter);
 app.use(outcomeRouter);
 app.use('/goals', goalPlanRouter);
 app.post('/goals', async (req, res) => {
+  const ownerId = currentUser(req).id;
   const body: unknown = req.body;
 
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
@@ -90,20 +101,20 @@ try {
      RETURNING id, title AS goal, reason,
                minutes_per_day AS "minutesPerDay",
                created_at AS "createdAt"`,
-    [goal.trim(), reason.trim(), minutes, LOCAL_OWNER_ID],
+    [goal.trim(), reason.trim(), minutes, ownerId],
   );
 
   if (outcomeInput) {
     const outcome = await client.query<{ id: string }>(
       `INSERT INTO public.goal_outcomes(goal_id,owner_id,title,description,outcome_type,target_value,target_unit,target_date)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
-      [result.rows[0]!.id,LOCAL_OWNER_ID,outcomeInput.title,outcomeInput.description,outcomeInput.targetValue===null?'qualitative':'measurable',outcomeInput.targetValue,outcomeInput.targetUnit,outcomeInput.targetDate],
+      [result.rows[0]!.id,ownerId,outcomeInput.title,outcomeInput.description,outcomeInput.targetValue===null?'qualitative':'measurable',outcomeInput.targetValue,outcomeInput.targetUnit,outcomeInput.targetDate],
     );
     for (const [index, milestone] of milestoneInputs.entries()) {
       await client.query(
         `INSERT INTO public.goal_milestones(goal_id,outcome_id,owner_id,title,description,sequence,target_value,target_unit,target_date)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [result.rows[0]!.id,outcome.rows[0]!.id,LOCAL_OWNER_ID,milestone.title,milestone.description,index+1,milestone.targetValue,milestone.targetUnit,milestone.targetDate],
+        [result.rows[0]!.id,outcome.rows[0]!.id,ownerId,milestone.title,milestone.description,index+1,milestone.targetValue,milestone.targetUnit,milestone.targetDate],
       );
     }
   }
@@ -119,13 +130,8 @@ try {
   client?.release();
 }
 });
-app.get('/health',(req,res)=>{
-    res.status(200).json({
-        status:'ok'
-    })
-})
-
-app.get('/goals', async (_req, res) => {
+app.get('/goals', async (req, res) => {
+  const ownerId = currentUser(req).id;
   res.set('Cache-Control', 'no-store');
 
   try {
@@ -142,9 +148,10 @@ app.get('/goals', async (_req, res) => {
               minutes_per_day AS "minutesPerDay",
               created_at AS "createdAt"
        FROM public.goals
-       WHERE owner_id = 'local'
+       WHERE owner_id = $1
        ORDER BY created_at DESC, id DESC
        LIMIT 50`,
+      [ownerId],
     );
 
     res.status(200).json({ goals: result.rows });

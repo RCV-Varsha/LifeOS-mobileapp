@@ -40,10 +40,9 @@ display. AI is not involved.
 
 ## Security boundary
 
-These endpoints are for local development and sample data. They validate IDs,
-request shapes, relationships, and stored state, but there is no authenticated
-user ownership yet. They must not be exposed publicly as production APIs until
-authentication and authorization are implemented.
+This historical V1 limitation was superseded by migration 007 and the
+development identity boundary. Current routes enforce internal user ownership,
+but the authentication mechanism is still not suitable for public production use.
 
 The local backend starts Node with `--use-system-ca`. This keeps TLS certificate
 verification enabled while allowing Node to use certificates trusted by the

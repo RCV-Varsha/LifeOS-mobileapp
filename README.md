@@ -9,6 +9,7 @@ organize their goals, tasks, habits, and plans.
 - Daily execution data → deterministic metrics → validated, persisted AI insight.
 - Changed daily context → deterministic feasibility → user-approved adaptive plan → execution.
 - Goal → explicit desired outcome → milestones → optionally linked tasks, with activity and achievement progress kept distinct.
+- Development identity → current-user authorization → isolated owned domain data.
 
 ## Workspace
 
@@ -30,3 +31,6 @@ See `docs/api/adaptive-planning.md` and
 
 See `docs/goal-outcomes-and-milestones.md`, `docs/api/outcomes.md`, and
 `docs/decisions/007-goal-outcomes-and-milestones.md` for outcome semantics.
+
+See `docs/identity-and-ownership.md` for the development-only identity model,
+ownership constraints, migration behavior, and production-auth replacement boundary.

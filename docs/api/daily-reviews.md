@@ -1,7 +1,7 @@
 # Daily Review API
 
-These local-prototype endpoints have no authenticated ownership. Do not expose
-them publicly until the application adds authentication and authorization.
+These endpoints use the centrally resolved development identity and owner-scoped
+reviews. This is not production authentication; do not expose them publicly.
 
 Both routes require a valid IANA `timeZone` query parameter. `:date` must be a
 real, non-future calendar date in `YYYY-MM-DD` form.

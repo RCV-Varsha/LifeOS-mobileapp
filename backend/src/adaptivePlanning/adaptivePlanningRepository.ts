@@ -202,7 +202,7 @@ export class AdaptivePlanningRepository {
       if(!row){await client.query('ROLLBACK');return null;}
       if(row.status==='accepted') {
         if(row.decisionKey===decisionKey && row.decisionHash!==decisionHash) throw new AdaptiveConflictError('idempotency_conflict');
-        const change=await client.query<{id:string;newVersion:number}>('SELECT id,new_version AS "newVersion" FROM public.daily_plan_changes WHERE proposal_id=$1',[id]);
+        const change=await client.query<{id:string;newVersion:number}>('SELECT id,new_version AS "newVersion" FROM public.daily_plan_changes WHERE proposal_id=$1 AND owner_id=$2',[id,ownerId]);
         await client.query('COMMIT'); return {proposal:mapProposal(row),change:change.rows[0]!,reused:true};
       }
       if(row.status!=='ready') throw new AdaptiveConflictError('already_decided');
@@ -216,15 +216,15 @@ export class AdaptivePlanningRepository {
          RETURNING id,version,active`,[ownerId,row.date,row.timeZone]);
       const plan=dailyPlan.rows[0]!;
       if(plan.version!==row.baseDailyPlanVersion) throw new AdaptiveConflictError('stale');
-      const previous=await itemsForPlan(client,plan.id);
-      await client.query('DELETE FROM public.daily_plan_items WHERE daily_plan_id=$1',[plan.id]);
+      const previous=await itemsForPlan(client,ownerId,plan.id);
+      await client.query('DELETE FROM public.daily_plan_items WHERE daily_plan_id=$1 AND owner_id=$2',[plan.id,ownerId]);
       for(const [index,item] of stored.selected.entries()) await client.query(
-        `INSERT INTO public.daily_plan_items(daily_plan_id,task_id,position,allocated_minutes)
-         SELECT $1,t.id,$3,$4 FROM public.tasks t WHERE t.id=$2 AND t.owner_id=$5 AND t.status='pending'`,
+        `INSERT INTO public.daily_plan_items(daily_plan_id,task_id,position,allocated_minutes,owner_id)
+         SELECT $1,t.id,$3,$4,$5 FROM public.tasks t WHERE t.id=$2 AND t.owner_id=$5 AND t.status='pending'`,
         [plan.id,item.taskId,index+1,item.allocationMinutes,ownerId]);
-      const count=await client.query<{count:string}>('SELECT count(*)::text AS count FROM public.daily_plan_items WHERE daily_plan_id=$1',[plan.id]);
+      const count=await client.query<{count:string}>('SELECT count(*)::text AS count FROM public.daily_plan_items WHERE daily_plan_id=$1 AND owner_id=$2',[plan.id,ownerId]);
       if(Number(count.rows[0]?.count)!==stored.selected.length) throw new AdaptiveConflictError('stale');
-      const updated=await client.query<{version:number}>('UPDATE public.daily_plans SET version=version+1,active=TRUE,updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING version',[plan.id]);
+      const updated=await client.query<{version:number}>('UPDATE public.daily_plans SET version=version+1,active=TRUE,updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND owner_id=$2 RETURNING version',[plan.id,ownerId]);
       const change=await client.query<{id:string;newVersion:number}>(
         `INSERT INTO public.daily_plan_changes(owner_id,daily_plan_id,proposal_id,context_revision,previous_active,previous_version,new_version,previous_items,new_items)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb) RETURNING id,new_version AS "newVersion"`,
@@ -249,17 +249,17 @@ export class AdaptivePlanningRepository {
       if(value.undoneAt){await client.query('COMMIT');return {undone:true,reused:true};}
       const plan=await client.query<{version:number}>('SELECT version FROM public.daily_plans WHERE id=$1 AND owner_id=$2 FOR UPDATE',[value.dailyPlanId,ownerId]);
       if(plan.rows[0]?.version!==value.newVersion) throw new AdaptiveConflictError('undo_conflict');
-      await client.query('DELETE FROM public.daily_plan_items WHERE daily_plan_id=$1',[value.dailyPlanId]);
-      for(const [index,item] of value.previousItems.entries()) await client.query('INSERT INTO public.daily_plan_items(daily_plan_id,task_id,position,allocated_minutes) VALUES($1,$2,$3,$4)',[value.dailyPlanId,item.taskId,index+1,item.allocationMinutes]);
-      await client.query('UPDATE public.daily_plans SET version=version+1,active=$2,updated_at=CURRENT_TIMESTAMP WHERE id=$1',[value.dailyPlanId,value.previousActive]);
-      await client.query('UPDATE public.daily_plan_changes SET undone_at=CURRENT_TIMESTAMP WHERE id=$1',[id]);
+      await client.query('DELETE FROM public.daily_plan_items WHERE daily_plan_id=$1 AND owner_id=$2',[value.dailyPlanId,ownerId]);
+      for(const [index,item] of value.previousItems.entries()) await client.query('INSERT INTO public.daily_plan_items(daily_plan_id,task_id,position,allocated_minutes,owner_id) VALUES($1,$2,$3,$4,$5)',[value.dailyPlanId,item.taskId,index+1,item.allocationMinutes,ownerId]);
+      await client.query('UPDATE public.daily_plans SET version=version+1,active=$2,updated_at=CURRENT_TIMESTAMP WHERE id=$1 AND owner_id=$3',[value.dailyPlanId,value.previousActive,ownerId]);
+      await client.query('UPDATE public.daily_plan_changes SET undone_at=CURRENT_TIMESTAMP WHERE id=$1 AND owner_id=$2',[id,ownerId]);
       await client.query('COMMIT');return {undone:true,reused:false};
     }catch(error){try{await client.query('ROLLBACK');}catch{} throw error;}finally{client.release();}
   }
 }
 
 function dateKeyToIso(key:number){return new Date(key*86_400_000).toISOString().slice(0,10);}
-async function itemsForPlan(client:PoolClient,id:string):Promise<PlannedItem[]>{const result=await client.query<{taskId:string;allocationMinutes:number}>('SELECT task_id AS "taskId",allocated_minutes AS "allocationMinutes" FROM public.daily_plan_items WHERE daily_plan_id=$1 ORDER BY position',[id]);return result.rows;}
+async function itemsForPlan(client:PoolClient,ownerId:string,id:string):Promise<PlannedItem[]>{const result=await client.query<{taskId:string;allocationMinutes:number}>('SELECT task_id AS "taskId",allocated_minutes AS "allocationMinutes" FROM public.daily_plan_items WHERE daily_plan_id=$1 AND owner_id=$2 ORDER BY position',[id,ownerId]);return result.rows;}
 async function assertVersions(client:PoolClient,ownerId:string,tasks:Record<string,number>,plans:Record<string,number>){
   const taskIds=Object.keys(tasks);const planIds=Object.keys(plans);
   const taskRows=await client.query<{id:string;revision:number;status:string}>('SELECT id,revision,status FROM public.tasks WHERE owner_id=$1 AND id=ANY($2::uuid[]) FOR UPDATE',[ownerId,taskIds]);

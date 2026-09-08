@@ -9,7 +9,7 @@ import {
   validateProposedPlan,
   type ProposedPlan,
 } from './ai/planSchema.ts';
-import { LOCAL_OWNER_ID } from './outcomes/types.ts';
+import { currentUser } from './auth.ts';
 
 export const goalPlanRouter = Router();
 
@@ -33,6 +33,7 @@ type SavedGoalPlan = {
 const planGenerations = new Map<string, Promise<SavedGoalPlan>>();
 
 goalPlanRouter.post('/:goalId/plan', async (req, res) => {
+  const ownerId = currentUser(req).id;
   const goalId = req.params.goalId;
 
   if (typeof goalId !== 'string' || !uuidPattern.test(goalId)) {
@@ -53,7 +54,7 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
               minutes_per_day AS "minutesPerDay"
        FROM public.goals
        WHERE id = $1 AND owner_id = $2`,
-      [goalId, LOCAL_OWNER_ID],
+      [goalId, ownerId],
     );
 
     const goal = goalResult.rows[0];
@@ -89,7 +90,7 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
               accepted_at AS "acceptedAt"
        FROM public.goal_plans
        WHERE goal_id = $1 AND owner_id = $2`,
-      [goalId, LOCAL_OWNER_ID],
+      [goalId, ownerId],
     );
 
     const storedPlan = existingPlan.rows[0];
@@ -121,7 +122,8 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
       return;
     }
 
-    let generation = planGenerations.get(goalId);
+    const generationKey = `${ownerId}:${goalId}`;
+    let generation = planGenerations.get(generationKey);
     const startedGeneration = generation === undefined;
 
     if (!generation) {
@@ -163,22 +165,22 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
             JSON.stringify(plan),
             'groq',
             model,
-            LOCAL_OWNER_ID,
+            ownerId,
           ],
         );
 
         return savedResult.rows[0];
       })();
 
-      planGenerations.set(goalId, generation);
+      planGenerations.set(generationKey, generation);
     }
 
     try {
       const savedPlan = await generation;
       res.status(startedGeneration ? 201 : 200).json({ goalPlan: savedPlan });
     } finally {
-      if (planGenerations.get(goalId) === generation) {
-        planGenerations.delete(goalId);
+      if (planGenerations.get(generationKey) === generation) {
+        planGenerations.delete(generationKey);
       }
     }
   } catch (error) {
@@ -212,6 +214,7 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
 });
 
 goalPlanRouter.get('/:goalId/plan', async (req, res) => {
+  const ownerId = currentUser(req).id;
   const goalId = req.params.goalId;
 
   if (typeof goalId !== 'string' || !uuidPattern.test(goalId)) {
@@ -246,7 +249,7 @@ goalPlanRouter.get('/:goalId/plan', async (req, res) => {
               accepted_at AS "acceptedAt"
        FROM public.goal_plans
        WHERE goal_id = $1 AND owner_id = $2`,
-      [goalId, LOCAL_OWNER_ID],
+      [goalId, ownerId],
     );
 
     const storedPlan = result.rows[0];
@@ -282,6 +285,7 @@ goalPlanRouter.get('/:goalId/plan', async (req, res) => {
 });
 
 goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
+  const ownerId = currentUser(req).id;
   const goalId = req.params.goalId;
 
   if (typeof goalId !== 'string' || !uuidPattern.test(goalId)) {
@@ -309,7 +313,7 @@ goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
        INNER JOIN public.goals g ON g.id = gp.goal_id
        WHERE gp.goal_id = $1 AND gp.owner_id = $2 AND g.owner_id = $2
        FOR UPDATE OF gp`,
-      [goalId, LOCAL_OWNER_ID],
+      [goalId, ownerId],
     );
 
     const storedPlan = planResult.rows[0];
@@ -334,12 +338,12 @@ goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
       `UPDATE public.goal_plans
        SET status = 'accepted',
            accepted_at = COALESCE(accepted_at, CURRENT_TIMESTAMP)
-       WHERE id = $1
+       WHERE id = $1 AND owner_id = $2
        RETURNING id,
                  goal_id AS "goalId",
                  status,
                  accepted_at AS "acceptedAt"`,
-      [storedPlan.id],
+      [storedPlan.id, ownerId],
     );
 
     const tasks = validatedPlan.days.flatMap((day) =>
@@ -369,7 +373,7 @@ goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
           task.position,
           task.instruction,
           task.plannedMinutes,
-          LOCAL_OWNER_ID,
+          ownerId,
         ],
       );
     }
@@ -385,9 +389,9 @@ goalPlanRouter.post('/:goalId/plan/accept', async (req, res) => {
               instruction,
               planned_minutes AS "plannedMinutes"
        FROM public.tasks
-       WHERE goal_plan_id = $1
+       WHERE goal_plan_id = $1 AND owner_id = $2
        ORDER BY day_number, position`,
-      [storedPlan.id],
+      [storedPlan.id, ownerId],
     );
 
     const tasksMatch =
