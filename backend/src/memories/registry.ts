@@ -1,8 +1,9 @@
-import type { MemoryCategory, MemoryKey } from './types.ts';
+import type { MemoryCategory, MemoryConfidence, MemoryKey, MemorySource } from './types.ts';
 
 export const memoryRegistry = {
   'planning.daily_buffer_minutes': {
     category: 'CONSTRAINT',
+    contexts: ['ADAPTIVE_PLANNING'],
     description: 'Minutes that Adaptive Planning must leave unallocated each day.',
     validate(value: unknown) {
       if (!Number.isInteger(value) || (value as number) < 0 || (value as number) > 240) {
@@ -11,7 +12,7 @@ export const memoryRegistry = {
       return value as number;
     },
   },
-} satisfies Record<MemoryKey, { category: MemoryCategory; description: string; validate(value: unknown): number }>;
+} satisfies Record<MemoryKey, { category: MemoryCategory; contexts: readonly ['ADAPTIVE_PLANNING']; description: string; validate(value: unknown): number }>;
 
 export function isMemoryKey(value: unknown): value is MemoryKey {
   return typeof value === 'string' && Object.hasOwn(memoryRegistry, value);
@@ -24,4 +25,14 @@ export function validateMemory(key: unknown, category: unknown, value: unknown) 
   return { key, category: definition.category, value: definition.validate(value) };
 }
 
-export type PlanningMemoryContext = { dailyBufferMinutes: number };
+export type PlanningMemorySelection = {
+  key: MemoryKey;
+  value: number;
+  revision: number;
+  provenance: MemorySource;
+  confidence: MemoryConfidence;
+  validFrom: string;
+  validUntil: string | null;
+  relevance: 'ADAPTIVE_PLANNING';
+};
+export type PlanningMemoryContext = { dailyBufferMinutes: number; selection: PlanningMemorySelection | null };

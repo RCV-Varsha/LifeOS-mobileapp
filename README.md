@@ -46,3 +46,6 @@ See `docs/explicit-memory-foundation.md`, `docs/api/memories.md`, and
 
 See `docs/context-intelligence.md` and
 `docs/decisions/010-feature-specific-context-assembly.md` for V8 context policies.
+
+See `docs/memory-intelligence-foundation.md` and
+`docs/decisions/011-deterministic-memory-selection.md` for date-valid, relevance-scoped V9 memory selection.

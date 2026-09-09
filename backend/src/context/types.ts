@@ -1,8 +1,16 @@
 import type { DailyReviewMetrics } from '../dailyReview/reviewData.ts';
 import type { PlanningTask } from '../adaptivePlanning/types.ts';
+import type { MemoryConfidence, MemorySource } from '../memories/types.ts';
 
 export type ContextAuthorization = { userId: string; basis: 'AUTHENTICATED_CURRENT_USER' };
 export type ContextValue<T> = { value: T; reason: string };
+export type MemoryContextValue = ContextValue<number> & {
+  provenance: MemorySource | 'SYSTEM_DEFAULT';
+  confidence: MemoryConfidence | 'DEFAULT';
+  revision: number | null;
+  validFrom: string | null;
+  validUntil: string | null;
+};
 
 export type AdaptivePlanningContext = {
   policy: 'ADAPTIVE_PLANNING_V1';
@@ -14,7 +22,7 @@ export type AdaptivePlanningContext = {
     maxMajorTasks: ContextValue<number|null>;
     explanationLength: ContextValue<'concise'|'standard'>;
   };
-  memories: { dailyBufferMinutes: ContextValue<number> };
+  memories: { dailyBufferMinutes: MemoryContextValue };
 };
 
 export type DailyReviewContext = {

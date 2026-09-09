@@ -18,7 +18,7 @@ export class ContextAssembler {
   async forAdaptivePlanning(user:CurrentUser,input:AdaptiveInput):Promise<AdaptivePlanningContext>{
     const [preferenceContext,memoryContext]=await Promise.all([
       this.preferences.context(user.id,['PLANNING','INTERACTION']),
-      this.memories.planningContext(user.id),
+      this.memories.planningContext(user.id,input.date),
     ]);
     const goals=new Map<string,string>();for(const task of input.tasks)goals.set(task.goalId,task.goalTitle);
     return validateAdaptivePlanningContext({
@@ -30,7 +30,12 @@ export class ContextAssembler {
         maxMajorTasks:{value:preferenceContext.maxMajorTasks,reason:'Owner-scoped active PLANNING preference, or the controlled absence default, selected by policy.'},
         explanationLength:{value:preferenceContext.explanationLength,reason:'Owner-scoped active INTERACTION preference, or the controlled standard default, selected by policy.'},
       },
-      memories:{dailyBufferMinutes:{value:memoryContext.dailyBufferMinutes,reason:'Owner-scoped active planning CONSTRAINT, or the controlled zero default, selected by exact key.'}},
+      memories:{dailyBufferMinutes:memoryContext.selection?{
+        value:memoryContext.selection.value,reason:'Owner-scoped, active, date-valid CONSTRAINT selected by the exact Adaptive Planning relevance policy.',
+        provenance:memoryContext.selection.provenance,confidence:memoryContext.selection.confidence,revision:memoryContext.selection.revision,
+        validFrom:memoryContext.selection.validFrom,validUntil:memoryContext.selection.validUntil,
+      }:{value:0,reason:'No owner-scoped, active, date-valid memory matched the exact Adaptive Planning relevance policy.',
+        provenance:'SYSTEM_DEFAULT',confidence:'DEFAULT',revision:null,validFrom:null,validUntil:null}},
     });
   }
 
@@ -51,6 +56,14 @@ export function validateAdaptivePlanningContext(value:AdaptivePlanningContext){
   if(!Number.isInteger(value.situation.availableMinutes)||value.situation.availableMinutes<0||value.situation.availableMinutes>1440)throw new Error('Invalid adaptive context capacity.');
   const max=value.preferences.maxMajorTasks.value;if(max!==null&&(!Number.isInteger(max)||max<1||max>10))throw new Error('Invalid adaptive context preference.');
   const buffer=value.memories.dailyBufferMinutes.value;if(!Number.isInteger(buffer)||buffer<0||buffer>240)throw new Error('Invalid adaptive context memory.');
+  const memory=value.memories.dailyBufferMinutes;
+  if(memory.provenance==='SYSTEM_DEFAULT'?(memory.confidence!=='DEFAULT'||memory.revision!==null||memory.validFrom!==null||memory.validUntil!==null):
+    (memory.confidence==='DEFAULT'||memory.revision===null||!Number.isInteger(memory.revision)||memory.revision<1||typeof memory.validFrom!=='string'))throw new Error('Invalid adaptive context memory provenance.');
+  if(memory.provenance!=='SYSTEM_DEFAULT'){
+    const expectedConfidence=memory.provenance==='USER_CORRECTION'?'CORRECTED':'CONFIRMED';
+    if(memory.confidence!==expectedConfidence||!validDate(memory.validFrom!)||
+      (memory.validUntil!==null&&(!validDate(memory.validUntil)||memory.validUntil<memory.validFrom!)))throw new Error('Invalid adaptive context memory trust metadata.');
+  }
   if(!Array.isArray(value.tasks)||!Array.isArray(value.goals))throw new Error('Invalid adaptive context collections.');
   return value;
 }
@@ -64,3 +77,4 @@ export function validateDailyReviewContext(value:DailyReviewContext){
 
 export function adaptiveAiContext(context:AdaptivePlanningContext):AdaptivePlanningAiContext{const {authorization:_authorization,...allowed}=context;return allowed;}
 export function dailyReviewAiContext(context:DailyReviewContext):DailyReviewAiContext{const {authorization:_authorization,...allowed}=context;return allowed;}
+function validDate(value:string){return /^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00.000Z`).toISOString().slice(0,10)===value;}

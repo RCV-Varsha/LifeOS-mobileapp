@@ -3,10 +3,18 @@ import { afterEach, test } from 'node:test';
 import express from 'express';
 import { generateMemorySuggestion, validateMemorySuggestion } from './groqMemorySuggestionService.ts';
 import { validateMemory } from './registry.ts';
+import { parseCreateMemory, parseMemoryChange, parseMemoryCorrection } from './validation.ts';
 
 const originalFetch=globalThis.fetch;
 afterEach(()=>{globalThis.fetch=originalFetch;});
 test('memory registry accepts only the supported typed planning constraint',()=>{assert.equal(validateMemory('planning.daily_buffer_minutes','CONSTRAINT',30).value,30);assert.throws(()=>validateMemory('profile.free_text','CONSTRAINT','anything'));assert.throws(()=>validateMemory('planning.daily_buffer_minutes','FACT',30));assert.throws(()=>validateMemory('planning.daily_buffer_minutes','CONSTRAINT',241));});
+test('memory validity accepts exact dates and rejects invalid or inverted ranges',()=>{
+  assert.deepEqual(parseCreateMemory({key:'planning.daily_buffer_minutes',category:'CONSTRAINT',value:30,validFrom:'2026-09-01',validUntil:'2026-09-30'}),
+    {key:'planning.daily_buffer_minutes',category:'CONSTRAINT',value:30,validFrom:'2026-09-01',validUntil:'2026-09-30'});
+  assert.throws(()=>parseCreateMemory({key:'planning.daily_buffer_minutes',category:'CONSTRAINT',value:30,validFrom:'2026-02-30'}));
+  assert.throws(()=>parseMemoryChange({value:20,expectedRevision:1,validFrom:'2026-10-01',validUntil:'2026-09-30'}));
+  assert.equal(parseMemoryCorrection({value:20,expectedRevision:1,note:'Changed',validUntil:null}).validUntil,null);
+});
 const suggestion={key:'planning.daily_buffer_minutes' as const,category:'CONSTRAINT' as const,value:30,reason:'The user explicitly requires planning buffer.'};
 test('memory suggestion validation rejects extra or malformed data',()=>{assert.deepEqual(validateMemorySuggestion(suggestion),suggestion);assert.throws(()=>validateMemorySuggestion({...suggestion,userId:'other'}));assert.throws(()=>validateMemorySuggestion({...suggestion,value:'30'}));});
 test('Groq memory suggestion returns validated output only',async()=>{process.env.GROQ_API_KEY='test';process.env.GROQ_MODEL='test';globalThis.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(suggestion)}}]}),{status:200});assert.deepEqual(await generateMemorySuggestion('Always leave thirty minutes free.'),suggestion);});
