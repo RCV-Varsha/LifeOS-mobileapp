@@ -11,6 +11,7 @@ import PreferencesScreen from './src/screens/PreferencesScreen';
 import MemoryScreen from './src/screens/MemoryScreen';
 import YouScreen from './src/screens/YouScreen';
 import PrimaryNavigation, { type PrimaryDestination } from './src/components/PrimaryNavigation';
+import { colors } from './src/ui/theme';
 export default function App() {
   const [session, setSession] = useState<CurrentSession | null>(null);
   const [sessionError, setSessionError] = useState(false);
@@ -77,6 +78,6 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  app: { flex: 1, backgroundColor: '#f7f2e8' },
-  session: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
+  app: { flex: 1, backgroundColor: colors.paper },
+  session: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24, backgroundColor:colors.paper },
 });

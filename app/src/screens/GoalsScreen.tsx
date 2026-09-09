@@ -104,5 +104,5 @@ const styles = StyleSheet.create({
   meta:{color:'#625d54'},
   empty:{color:'#625d54',fontSize:16,lineHeight:24,marginTop:18},
   cardAction: { marginTop: 12, alignItems: 'flex-start' },
-  error: { color: '#b00020', marginBottom: 16 },
+  error: { color: '#9b3d35', marginBottom: 16 },
 });

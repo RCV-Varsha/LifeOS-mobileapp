@@ -7,6 +7,7 @@ import {
   TextInput,
 } from 'react-native';
 import { saveGoal } from '../services/goalService';
+import TextAction from '../components/TextAction';
 type GoalOnboardingScreenProps = {
   onSaved: () => void;
   onCancel: () => void;
@@ -88,6 +89,8 @@ export default function GoalOnboardingScreen({
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
     >
+      <TextAction label="Back to direction" onPress={onCancel} disabled={isSaving} />
+      <Text style={styles.eyebrow}>DIRECTION</Text>
       <Text style={styles.heading}>
         {isReviewing ? 'Review your goal' : 'What do you want to work toward?'}
       </Text>
@@ -109,7 +112,6 @@ export default function GoalOnboardingScreen({
     <Text style={styles.note} accessibilityLiveRegion="polite">
       Goal saved successfully.
     </Text>
-    <Text selectable>Goal ID: {savedId}</Text>
   </>
 ) : (
   <>
@@ -187,10 +189,7 @@ export default function GoalOnboardingScreen({
           <Button title="Review goal" onPress={reviewGoal} />
         </>
       )}
-      <Text style={styles.note}>
-  Cancel discards this unsaved draft.
-</Text>
-<Button title="Cancel" onPress={onCancel} disabled={isSaving} />
+      <Text style={styles.note}>Cancel discards this unsaved draft.</Text>
     </ScrollView>
   );
 }
@@ -199,21 +198,23 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 64,
-    paddingBottom: 48,
-    backgroundColor: '#fff',
+    paddingTop: 54,
+    paddingBottom: 42,
+    backgroundColor: '#f7f2e8',
   },
-  heading: { fontSize: 26, fontWeight: '700', marginBottom: 16 },
-  label: { fontSize: 16, fontWeight: '600', marginTop: 20, marginBottom: 8 },
+  eyebrow:{color:'#486553',fontWeight:'800',letterSpacing:1.5,marginTop:24},
+  heading: { fontSize: 30, lineHeight:37, color:'#20251f', fontWeight: '700', marginTop:8, marginBottom: 16 },
+  label: { fontSize: 15, color:'#486553', fontWeight: '700', marginTop: 20, marginBottom: 8 },
   input: {
     borderWidth: 1,
-    borderColor: '#777',
+    borderColor: '#aaa193',
     borderRadius: 8,
     padding: 12,
     fontSize: 16,
-    color: '#111',
+    color: '#20251f',
+    backgroundColor:'#fffdf8',
   },
   multiline: { minHeight: 100, textAlignVertical: 'top' },
-  note: { color: '#555', marginVertical: 24 },
-  error: { color: '#b00020', marginTop: 16 },
+  note: { color: '#625d54', lineHeight:21, marginVertical: 24 },
+  error: { color: '#9b3d35', marginTop: 16 },
 });

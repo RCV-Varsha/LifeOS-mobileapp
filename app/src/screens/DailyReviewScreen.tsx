@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { DailyReviewRequestError, generateDailyReview, getDailyReview, type DailyReview, type ReviewMetrics } from '../services/dailyReviewService';
+import TextAction from '../components/TextAction';
 
 type Props = { date: string; onBack: () => void; onReplan: () => void };
 
@@ -41,7 +42,7 @@ export default function DailyReviewScreen({ date, onBack, onReplan }: Props) {
   }
 
   return <ScrollView contentContainerStyle={styles.container}>
-    <Button title="Back to today" onPress={onBack} disabled={isGenerating} />
+    <TextAction label="Back to NOW" onPress={onBack} disabled={isGenerating} />
     <Text style={styles.eyebrow}>DAILY REVIEW</Text><Text style={styles.heading}>Your insight</Text><Text style={styles.date}>{date}</Text>
     {isLoading ? <ActivityIndicator style={styles.loading} size="large" /> : error && !metrics ? <View style={styles.message}><Text style={styles.error}>{error}</Text><Button title="Try again" onPress={() => setReload((value) => value + 1)} /></View> : metrics ? <>
       <View style={styles.summary}><Text style={styles.percent}>{metrics.completionRate}%</Text><Text style={styles.count}>{metrics.completedTasks} completed · {metrics.incompleteTasks} incomplete</Text><Text style={styles.muted}>{metrics.goals.length} goal{metrics.goals.length === 1 ? '' : 's'} represented</Text></View>
@@ -57,8 +58,8 @@ export default function DailyReviewScreen({ date, onBack, onReplan }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 56, paddingBottom: 48, backgroundColor: '#fff' },
-  eyebrow: { color: '#6b4ba1', fontWeight: '800', letterSpacing: 1.4, marginTop: 28 }, heading: { fontSize: 28, fontWeight: '700', marginTop: 6 }, date: { color: '#666', marginTop: 6 }, loading: { marginTop: 48 },
-  summary: { padding: 18, marginTop: 24, borderRadius: 10, backgroundColor: '#f2edfa' }, percent: { fontSize: 36, fontWeight: '800', color: '#6b4ba1' }, count: { fontSize: 17, fontWeight: '700', marginTop: 5 }, muted: { color: '#666', lineHeight: 21, marginTop: 6 },
-  aiSummary: { fontSize: 18, lineHeight: 26, marginTop: 26 }, milestones:{marginTop:18,padding:16,borderRadius:9,backgroundColor:'#f5f4f9'}, section: { marginTop: 24 }, sectionTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 }, item: { fontSize: 16, lineHeight: 23, marginBottom: 7 }, next: { marginTop: 26, padding: 17, borderRadius: 9, backgroundColor: '#eef7fc' }, message: { gap: 14, marginTop: 32 }, error: { color: '#b00020', marginTop: 18 },
+  container: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 54, paddingBottom: 42, backgroundColor: '#f7f2e8' },
+  eyebrow: { color: '#486553', fontWeight: '800', letterSpacing: 1.5, marginTop: 24 }, heading: { fontSize: 30, lineHeight:37, color:'#20251f', fontWeight: '700', marginTop: 8 }, date: { color: '#81796d', marginTop: 6 }, loading: { marginTop: 48 },
+  summary: { paddingVertical: 20, marginTop: 24, borderTopWidth:2,borderBottomWidth:1,borderColor:'#76907e' }, percent: { fontSize: 36, fontWeight: '800', color: '#486553' }, count: { fontSize: 17, color:'#20251f', fontWeight: '700', marginTop: 5 }, muted: { color: '#625d54', lineHeight: 21, marginTop: 6 },
+  aiSummary: { fontSize: 19, color:'#20251f', lineHeight: 27, marginTop: 26 }, milestones:{marginTop:18,paddingVertical:16,borderBottomWidth:1,borderBottomColor:'#d9d1c3'}, section: { marginTop: 24 }, sectionTitle: { fontSize: 18, color:'#20251f', fontWeight: '700', marginBottom: 8 }, item: { fontSize: 16, color:'#20251f', lineHeight: 23, marginBottom: 7 }, next: { marginTop: 26, padding: 17, borderLeftWidth:3,borderLeftColor:'#486553', backgroundColor: '#e5eee7' }, message: { gap: 14, marginTop: 32 }, error: { color: '#9b3d35', marginTop: 18 },
 });
