@@ -5,10 +5,9 @@ import { getGoals, type GoalSummary } from '../services/goalService';
 type GoalsScreenProps = {
   onAddGoal: () => void;
   onOpenGoal: (goalId: string, goalTitle: string) => void;
-  onToday: () => void;
 };
 
-export default function GoalsScreen({ onAddGoal, onOpenGoal, onToday }: GoalsScreenProps) {
+export default function GoalsScreen({ onAddGoal, onOpenGoal }: GoalsScreenProps) {
   const [goals, setGoals] = useState<GoalSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -45,8 +44,9 @@ export default function GoalsScreen({ onAddGoal, onOpenGoal, onToday }: GoalsScr
 
   return (
     <View style={styles.container}>
-      <Text style={styles.heading}>Your goals</Text>
-      <Text style={styles.subtitle}>Your 50 most recent goals</Text>
+      <Text style={styles.eyebrow}>DIRECTION</Text>
+      <Text style={styles.heading}>What you are moving toward</Text>
+      <Text style={styles.subtitle}>Goals hold the direction. Outcomes and milestones show what progress means.</Text>
 
       {isLoading ? (
         <Text accessibilityLiveRegion="polite">Loading goals...</Text>
@@ -59,11 +59,11 @@ export default function GoalsScreen({ onAddGoal, onOpenGoal, onToday }: GoalsScr
           style={styles.list}
           data={goals}
           keyExtractor={(item) => item.id}
-          ListEmptyComponent={<Text>No goals yet. Create your first goal.</Text>}
+          ListEmptyComponent={<Text style={styles.empty}>No direction yet. Add a goal when something matters enough to pursue.</Text>}
           renderItem={({ item }) => (
             <View style={styles.card}>
               <Text style={styles.title}>{item.goal}</Text>
-              <Text>{item.minutesPerDay} minutes per day</Text>
+              <Text style={styles.meta}>{item.minutesPerDay} minutes set aside each day</Text>
               <View style={styles.cardAction}>
                 <Button title="View goal" onPress={() => onOpenGoal(item.id,item.goal)} />
               </View>
@@ -78,7 +78,6 @@ export default function GoalsScreen({ onAddGoal, onOpenGoal, onToday }: GoalsScr
         onPress={() => setReload((value) => value + 1)}
       />
       <Button title="Add goal" onPress={onAddGoal} />
-      <Button title="Today's tasks" onPress={onToday} />
     </View>
   );
 }
@@ -87,21 +86,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 64,
-    paddingBottom: 48,
-    backgroundColor: '#fff',
+    paddingTop: 58,
+    paddingBottom: 28,
+    backgroundColor: '#f7f2e8',
   },
-  heading: { fontSize: 26, fontWeight: '700' },
-  subtitle: { color: '#555', marginTop: 8, marginBottom: 24 },
+  eyebrow:{color:'#486553',fontWeight:'800',letterSpacing:1.5},
+  heading: { fontSize: 30, lineHeight:37, fontWeight: '700', color:'#20251f', marginTop:8 },
+  subtitle: { color: '#625d54', lineHeight:22, marginTop: 10, marginBottom: 28 },
   list: { flex: 1 },
   card: {
     padding: 16,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#d9d1c3',
   },
-  title: { fontSize: 18, fontWeight: '600', marginBottom: 8 },
+  title: { fontSize: 19, fontWeight: '700', color:'#20251f', marginBottom: 8 },
+  meta:{color:'#625d54'},
+  empty:{color:'#625d54',fontSize:16,lineHeight:24,marginTop:18},
   cardAction: { marginTop: 12, alignItems: 'flex-start' },
   error: { color: '#b00020', marginBottom: 16 },
 });
