@@ -13,6 +13,7 @@ organize their goals, tasks, habits, and plans.
 - Explicit preferences → corrections → scoped planning and explanation behavior.
 - Explicit memory → consent and corrections → deterministic planning constraint.
 - Feature request → authorized context assembly → bounded AI explanation or insight.
+- Current authorized state → deterministic NOW recommendation → existing user-controlled action.
 
 ## Workspace
 
@@ -49,3 +50,5 @@ See `docs/context-intelligence.md` and
 
 See `docs/memory-intelligence-foundation.md` and
 `docs/decisions/011-deterministic-memory-selection.md` for date-valid, relevance-scoped V9 memory selection.
+
+See `docs/unified-now-experience.md` and `docs/api/now.md` for the V10 unified NOW experience.

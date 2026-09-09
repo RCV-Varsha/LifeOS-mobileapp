@@ -8,8 +8,8 @@
     "start": "node --use-system-ca --env-file=.env src/server.ts",
     "dev": "node --use-system-ca --env-file=.env --watch src/server.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/identity.test.ts src/context/contextAssembler.test.ts src/preferences/preferences.test.ts src/memories/memories.test.ts src/dailyReview/dailyReview.test.ts src/adaptivePlanning/adaptivePlanning.test.ts src/outcomes/outcomes.test.ts",
-    "test:integration": "node --env-file=.env --experimental-strip-types --test src/ownership.integration.test.ts src/context/contextAssembler.integration.test.ts src/preferences/preferences.integration.test.ts src/memories/memories.integration.test.ts"
+    "test": "node --experimental-strip-types --test src/identity.test.ts src/context/contextAssembler.test.ts src/preferences/preferences.test.ts src/memories/memories.test.ts src/now/now.test.ts src/dailyReview/dailyReview.test.ts src/adaptivePlanning/adaptivePlanning.test.ts src/outcomes/outcomes.test.ts",
+    "test:integration": "node --env-file=.env --experimental-strip-types --test src/ownership.integration.test.ts src/context/contextAssembler.integration.test.ts src/preferences/preferences.integration.test.ts src/memories/memories.integration.test.ts src/now/now.integration.test.ts"
   },
   "keywords": [],
   "author": "",
