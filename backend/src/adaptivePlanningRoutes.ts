@@ -59,8 +59,10 @@ export function createAdaptivePlanningRouter(
       if(!context){res.status(409).json({error:'Save available time before requesting a proposal.',code:'context_required'});return;}
       const tasks=await repository.tasksForDate(ownerId,date,timeZone);
       const assembled=await contexts.forAdaptivePlanning(user,{date:date.isoDate,timeZone,availableMinutes:context.availableMinutes,priorityTaskId:context.priorityTaskId,tasks});
-      const hash=requestHash({date:date.isoDate,timeZone,includeExplanation,preferences:assembled.preferences,memories:assembled.memories});
-      const evaluation=evaluateDailyPlan(tasks,context.availableMinutes,context.priorityTaskId,assembled.preferences.maxMajorTasks.value,assembled.memories.dailyBufferMinutes.value);
+      const calendarMinutes=assembled.external.calendar.state==='AVAILABLE'?assembled.external.calendar.freeMinutesBeforeNext:null;
+      const effectiveAvailableMinutes=calendarMinutes===null?context.availableMinutes:Math.min(context.availableMinutes,calendarMinutes);
+      const hash=requestHash({date:date.isoDate,timeZone,includeExplanation,preferences:assembled.preferences,memories:assembled.memories,external:assembled.external});
+      const evaluation=evaluateDailyPlan(tasks,effectiveAvailableMinutes,context.priorityTaskId,assembled.preferences.maxMajorTasks.value,assembled.memories.dailyBufferMinutes.value);
       if(evaluation.currentPlanFits){res.status(200).json({kind:'no_change',evaluation,tasks});return;}
       let explanation=null;let aiFallback=false;
       if(includeExplanation&&process.env.GROQ_API_KEY&&process.env.GROQ_MODEL){try{explanation=await explain(evaluation,assembled);}catch(error){aiFallback=true;console.error('Adaptive explanation unavailable:',error instanceof Error?error.name:'Unknown');}}

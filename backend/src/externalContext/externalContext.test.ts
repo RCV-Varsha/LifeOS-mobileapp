@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { parseCalendar, CalendarProvider } from './calendarProvider.ts';
+import { normalize, WeatherProvider } from './weatherProvider.ts';
+import { ExternalContextService } from './externalContextService.ts';
+import type { PlanningTask } from '../adaptivePlanning/types.ts';
+
+const now=new Date('2026-09-10T10:00:00.000Z');
+test('calendar normalizes only bounded future timed commitments',()=>{const value=parseCalendar('BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20260910T103500Z\nDTEND:20260910T110500Z\nSUMMARY:Meeting\nEND:VEVENT\nEND:VCALENDAR',now);assert.equal(value.freeMinutesBeforeNext,35);assert.equal(value.nextCommitment?.durationMinutes,30);});
+test('calendar marks old observations stale',()=>assert.equal(parseCalendar('BEGIN:VCALENDAR\nEND:VCALENDAR',now,new Date(now.getTime()-16*60_000)).state,'STALE'));
+test('calendar provider is owner scoped and fails closed',async()=>{let calls=0;const provider=new CalendarProvider({ownerId:'a',url:'https://example.test/private.ics'},async()=>{calls++;throw new Error('down');});assert.equal((await provider.load('b',now)).state,'UNAVAILABLE');assert.equal(calls,0);assert.equal((await provider.load('a',now)).state,'UNAVAILABLE');});
+test('weather validates and bounds hourly forecast',()=>{const value=normalize({hourly:{time:['2026-09-10T10:00','2026-09-10T11:00'],temperature_2m:[24,26],precipitation_probability:[20,75]}},now);assert.equal(value?.temperatureC,25);assert.equal(value?.precipitationProbability,75);});
+test('weather provider is owner scoped and fails closed',async()=>{let calls=0;const provider=new WeatherProvider({ownerId:'a',latitude:1,longitude:2,location:'Test'},async()=>{calls++;return new Response('{}',{status:503});});assert.equal((await provider.load('b',now)).state,'UNAVAILABLE');assert.equal(calls,0);assert.equal((await provider.load('a',now)).state,'UNAVAILABLE');});
+test('weather relevance requires explicit outdoor wording',async()=>{const task={id:'t',goalId:'g',goalPlanId:'p',goalTitle:'G',instruction:'Work outside',estimatedMinutes:20,status:'pending',goalPriority:0,planOrder:1,taskOrder:1,revision:1,planVersion:1} satisfies PlanningTask;const service=new ExternalContextService({load:async()=>({state:'UNAVAILABLE',source:'ICAL',observedAt:now.toISOString(),freshUntil:null,nextCommitment:null,freeMinutesBeforeNext:null})} as never,{load:async()=>({state:'AVAILABLE',source:'OPEN_METEO',observedAt:now.toISOString(),freshUntil:new Date(now.getTime()+1).toISOString(),location:'Test',window:{startsAt:now.toISOString(),endsAt:new Date(now.getTime()+3600000).toISOString(),temperatureC:20,precipitationProbability:80},relevantToTaskIds:[]})} as never);assert.deepEqual((await service.forPlanning('a','UTC',[task],now)).weather.relevantToTaskIds,['t']);});

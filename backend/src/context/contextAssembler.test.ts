@@ -48,3 +48,9 @@ test('runtime contract rejects memories in Daily Review context',()=>{
   const invalid={policy:'DAILY_REVIEW_V1',authorization:{userId:user.id,basis:'AUTHENTICATED_CURRENT_USER'},situation:{date:'2026-09-08',timeZone:'UTC'},execution:{totalTasks:0,completedTasks:0,incompleteTasks:0,completionRate:0,goals:[],milestoneProgress:[]},preferences:{explanationLength:{value:'standard',reason:'test'}},memories:[{value:1}]} as never;
   assert.throws(()=>validateDailyReviewContext(invalid));
 });
+
+test('Adaptive Planning receives normalized external context and AI gets only relevant minimum',async()=>{
+  const observedAt='2026-09-08T12:00:00.000Z';const freshUntil='2026-09-08T12:15:00.000Z';
+  const assembler=new ContextAssembler({context:async()=>({maxMajorTasks:null,explanationLength:'standard'})},{planningContext:async()=>emptyMemory},{forPlanning:async(ownerId)=>{assert.equal(ownerId,user.id);return{calendar:{state:'AVAILABLE',source:'ICAL',observedAt,freshUntil,nextCommitment:{title:'Private meeting name',startsAt:'2026-09-08T12:35:00.000Z',endsAt:'2026-09-08T13:05:00.000Z',durationMinutes:30,minutesUntilStart:35},freeMinutesBeforeNext:35},weather:{state:'STALE',source:'OPEN_METEO',observedAt,freshUntil:null,location:'Private location',window:{startsAt:observedAt,endsAt:freshUntil,temperatureC:25,precipitationProbability:80},relevantToTaskIds:[]}};}});
+  const context=await assembler.forAdaptivePlanning(user,{date:'2026-09-08',timeZone:'UTC',availableMinutes:60,priorityTaskId:null,tasks:[]});const ai=adaptiveAiContext(context);assert.equal(ai.external.calendar?.freeMinutesBeforeNext,35);assert.equal(JSON.stringify(ai).includes('Private meeting name'),false);assert.equal(ai.external.weather,null);
+});

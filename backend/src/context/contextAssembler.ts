@@ -4,6 +4,8 @@ import type { CurrentUser } from '../auth.ts';
 import type { DailyReviewMetrics } from '../dailyReview/reviewData.ts';
 import type { PlanningTask } from '../adaptivePlanning/types.ts';
 import type { AdaptivePlanningAiContext, AdaptivePlanningContext, DailyReviewAiContext, DailyReviewContext } from './types.ts';
+import { ExternalContextService } from '../externalContext/externalContextService.ts';
+import type { ExternalContextReader } from '../externalContext/types.ts';
 
 type PreferenceSelector=Pick<PreferenceRepository,'context'>;
 type MemorySelector=Pick<MemoryRepository,'planningContext'>;
@@ -13,12 +15,14 @@ type ReviewInput={date:string;timeZone:string;metrics:DailyReviewMetrics};
 export class ContextAssembler {
   private readonly preferences:PreferenceSelector;
   private readonly memories:MemorySelector;
-  constructor(preferences:PreferenceSelector,memories:MemorySelector){this.preferences=preferences;this.memories=memories;}
+  private readonly external:ExternalContextReader;
+  constructor(preferences:PreferenceSelector,memories:MemorySelector,external:ExternalContextReader=new ExternalContextService()){this.preferences=preferences;this.memories=memories;this.external=external;}
 
   async forAdaptivePlanning(user:CurrentUser,input:AdaptiveInput):Promise<AdaptivePlanningContext>{
-    const [preferenceContext,memoryContext]=await Promise.all([
+    const [preferenceContext,memoryContext,external]=await Promise.all([
       this.preferences.context(user.id,['PLANNING','INTERACTION']),
       this.memories.planningContext(user.id,input.date),
+      this.external.forPlanning(user.id,input.timeZone,input.tasks),
     ]);
     const goals=new Map<string,string>();for(const task of input.tasks)goals.set(task.goalId,task.goalTitle);
     return validateAdaptivePlanningContext({
@@ -36,6 +40,7 @@ export class ContextAssembler {
         validFrom:memoryContext.selection.validFrom,validUntil:memoryContext.selection.validUntil,
       }:{value:0,reason:'No owner-scoped, active, date-valid memory matched the exact Adaptive Planning relevance policy.',
         provenance:'SYSTEM_DEFAULT',confidence:'DEFAULT',revision:null,validFrom:null,validUntil:null}},
+      external,
     });
   }
 
@@ -65,6 +70,7 @@ export function validateAdaptivePlanningContext(value:AdaptivePlanningContext){
       (memory.validUntil!==null&&(!validDate(memory.validUntil)||memory.validUntil<memory.validFrom!)))throw new Error('Invalid adaptive context memory trust metadata.');
   }
   if(!Array.isArray(value.tasks)||!Array.isArray(value.goals))throw new Error('Invalid adaptive context collections.');
+  validateExternal(value.external,value.tasks);
   return value;
 }
 
@@ -75,6 +81,7 @@ export function validateDailyReviewContext(value:DailyReviewContext){
   return value;
 }
 
-export function adaptiveAiContext(context:AdaptivePlanningContext):AdaptivePlanningAiContext{const {authorization:_authorization,...allowed}=context;return allowed;}
+export function adaptiveAiContext(context:AdaptivePlanningContext):AdaptivePlanningAiContext{const {authorization:_authorization,external,...allowed}=context;const calendar=external.calendar.state==='AVAILABLE'&&external.calendar.nextCommitment&&external.calendar.freeMinutesBeforeNext!==null?{freeMinutesBeforeNext:external.calendar.freeMinutesBeforeNext,startsAt:external.calendar.nextCommitment.startsAt,durationMinutes:external.calendar.nextCommitment.durationMinutes,source:external.calendar.source}:null;const weather=external.weather.state==='AVAILABLE'&&external.weather.window&&external.weather.location&&external.weather.relevantToTaskIds.length>0?{...external.weather.window,location:external.weather.location,relevantToTaskIds:external.weather.relevantToTaskIds,source:external.weather.source}:null;return{...allowed,external:{calendar,weather}};}
 export function dailyReviewAiContext(context:DailyReviewContext):DailyReviewAiContext{const {authorization:_authorization,...allowed}=context;return allowed;}
 function validDate(value:string){return /^\d{4}-\d{2}-\d{2}$/.test(value)&&new Date(`${value}T00:00:00.000Z`).toISOString().slice(0,10)===value;}
+function validateExternal(value:AdaptivePlanningContext['external'],tasks:AdaptivePlanningContext['tasks']){for(const source of [value.calendar,value.weather]){if(!['AVAILABLE','UNAVAILABLE','STALE'].includes(source.state)||Number.isNaN(Date.parse(source.observedAt)))throw new Error('Invalid external context metadata.');if(source.state==='AVAILABLE'&&(!source.freshUntil||Date.parse(source.freshUntil)<=Date.parse(source.observedAt)))throw new Error('Invalid external context freshness.');}if(value.weather.relevantToTaskIds.some((id)=>!tasks.some((task)=>task.id===id)))throw new Error('External context references an unknown task.');}

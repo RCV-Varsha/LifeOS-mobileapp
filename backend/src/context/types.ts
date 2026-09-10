@@ -1,6 +1,7 @@
 import type { DailyReviewMetrics } from '../dailyReview/reviewData.ts';
 import type { PlanningTask } from '../adaptivePlanning/types.ts';
 import type { MemoryConfidence, MemorySource } from '../memories/types.ts';
+import type { ExternalPlanningContext } from '../externalContext/types.ts';
 
 export type ContextAuthorization = { userId: string; basis: 'AUTHENTICATED_CURRENT_USER' };
 export type ContextValue<T> = { value: T; reason: string };
@@ -23,6 +24,7 @@ export type AdaptivePlanningContext = {
     explanationLength: ContextValue<'concise'|'standard'>;
   };
   memories: { dailyBufferMinutes: MemoryContextValue };
+  external: ExternalPlanningContext;
 };
 
 export type DailyReviewContext = {
@@ -34,5 +36,5 @@ export type DailyReviewContext = {
   memories: [];
 };
 
-export type AdaptivePlanningAiContext = Omit<AdaptivePlanningContext,'authorization'>;
+export type AdaptivePlanningAiContext = Omit<AdaptivePlanningContext,'authorization'|'external'> & {external:{calendar:{freeMinutesBeforeNext:number;startsAt:string;durationMinutes:number;source:'ICAL'}|null;weather:{temperatureC:number;precipitationProbability:number;startsAt:string;endsAt:string;location:string;relevantToTaskIds:string[];source:'OPEN_METEO'}|null}};
 export type DailyReviewAiContext = Omit<DailyReviewContext,'authorization'>;
