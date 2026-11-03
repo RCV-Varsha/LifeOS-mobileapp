@@ -3,9 +3,9 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "npm --prefix app run android --",
+    "android": "npm --prefix mobile-native run android --",
     "ios": "npm --prefix app run ios --",
-    "start": "npm --prefix app run start --"
+    "start": "npm --prefix mobile-native run start --"
   },
   "dependencies": {
     "react": "18.3.1",
