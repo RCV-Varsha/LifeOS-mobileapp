@@ -25,14 +25,14 @@ export class MemoryRepository {
   async list(userId: string) {
     const result=await this.pool.query<Row>(`SELECT ${columns} FROM public.user_memories m
       INNER JOIN public.user_memory_versions v ON v.memory_id=m.id AND v.user_id=m.user_id
-      WHERE m.user_id=$1 AND v.status IN ('ACTIVE','ARCHIVED') ORDER BY m.key`,[userId]);
+      WHERE m.user_id=$1 AND m.category='CONSTRAINT' AND v.status IN ('ACTIVE','ARCHIVED') ORDER BY m.key`,[userId]);
     return result.rows.map(map);
   }
 
   async get(userId: string, memoryId: string) {
     const result=await this.pool.query<Row>(`SELECT ${columns} FROM public.user_memories m
       INNER JOIN public.user_memory_versions v ON v.memory_id=m.id AND v.user_id=m.user_id
-      WHERE m.user_id=$1 AND m.id=$2 AND v.status IN ('ACTIVE','ARCHIVED')`,[userId,memoryId]);
+      WHERE m.user_id=$1 AND m.id=$2 AND m.category='CONSTRAINT' AND v.status IN ('ACTIVE','ARCHIVED')`,[userId,memoryId]);
     return result.rows[0]?map(result.rows[0]):null;
   }
 
@@ -66,7 +66,7 @@ export class MemoryRepository {
   async history(userId:string,memoryId:string) {
     const versions=await this.pool.query<Row>(`SELECT ${columns} FROM public.user_memories m
       INNER JOIN public.user_memory_versions v ON v.memory_id=m.id AND v.user_id=m.user_id
-      WHERE m.user_id=$1 AND m.id=$2 ORDER BY v.revision DESC`,[userId,memoryId]);
+      WHERE m.user_id=$1 AND m.id=$2 AND m.category='CONSTRAINT' ORDER BY v.revision DESC`,[userId,memoryId]);
     if(versions.rows.length===0)return null;
     const corrections=await this.pool.query<{id:string;revision:number;previousVersionId:string;newVersionId:string;note:string|null;createdAt:Date}>(
       `SELECT id,revision,previous_version_id AS "previousVersionId",new_version_id AS "newVersionId",note,created_at AS "createdAt"
@@ -114,7 +114,7 @@ export class MemoryRepository {
 
 async function lockCurrent(client:PoolClient,userId:string,memoryId:string){const result=await client.query<Row>(`SELECT ${columns} FROM public.user_memories m
   INNER JOIN public.user_memory_versions v ON v.memory_id=m.id AND v.user_id=m.user_id
-  WHERE m.user_id=$1 AND m.id=$2 AND v.status IN ('ACTIVE','ARCHIVED') FOR UPDATE OF m,v`,[userId,memoryId]);return result.rows[0]??null;}
+  WHERE m.user_id=$1 AND m.id=$2 AND m.category='CONSTRAINT' AND v.status IN ('ACTIVE','ARCHIVED') FOR UPDATE OF m,v`,[userId,memoryId]);return result.rows[0]??null;}
 function databaseCode(error:unknown){return typeof error==='object'&&error!==null&&'code' in error?error.code:null;}
 function confidenceFor(source:MemorySource):MemoryConfidence{return source==='USER_CORRECTION'?'CORRECTED':'CONFIRMED';}
 function resolvedValidity(input:MemoryValidityInput,current?:Pick<Memory,'validFrom'|'validUntil'>){

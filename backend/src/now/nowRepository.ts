@@ -12,7 +12,7 @@ export class NowRepository{
   constructor(pool:Pool,external:ExternalContextReader=new ExternalContextService(),clock=()=>new Date()){this.pool=pool;this.adaptive=new AdaptivePlanningRepository(pool);this.preferences=new PreferenceRepository(pool);this.memories=new MemoryRepository(pool);this.external=external;this.clock=clock;}
   async snapshot(ownerId:string,date:{key:number;isoDate:string},timeZone:string):Promise<NowSnapshot>{
     const [tasks,context,preferences,memory,proposal,goals]=await Promise.all([
-      this.adaptive.tasksForDate(ownerId,date,timeZone),this.adaptive.getContext(ownerId,date.isoDate,timeZone),
+      this.adaptive.currentPlanTasksForDate(ownerId,date,timeZone),this.adaptive.getContext(ownerId,date.isoDate,timeZone),
       this.preferences.context(ownerId,['PLANNING']),this.memories.planningContext(ownerId,date.isoDate),
       this.pool.query<{id:string}>(`SELECT id FROM public.daily_plan_proposals WHERE owner_id=$1 AND local_date=$2 AND time_zone=$3 AND status='ready' ORDER BY created_at DESC,id DESC LIMIT 1`,[ownerId,date.isoDate,timeZone]),
       this.pool.query<{count:string}>('SELECT count(*)::text AS count FROM public.goals WHERE owner_id=$1',[ownerId]),

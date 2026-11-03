@@ -1,3 +1,4 @@
+import { colors, typography } from '../ui/theme';
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { checkBackendHealth } from '../services/healthService';
@@ -39,14 +40,14 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f7f2e8",
+    backgroundColor: colors.paper,
     alignItems: "flex-start",
     justifyContent: "center",
     padding:24,
     gap:12,
   },
-  eyebrow:{color:'#486553',fontWeight:'800',letterSpacing:1.5},
-  heading:{fontSize:32,lineHeight:39,fontWeight:'700',color:'#20251f'},
-  muted:{color:'#625d54',fontSize:16,lineHeight:24,marginBottom:12},
-  status:{color:'#81796d',marginTop:12},
+  eyebrow:{...typography.eyebrow,marginTop:16},
+  heading:{fontSize:32,lineHeight:39,fontWeight:'700',color:colors.ink},
+  muted:{color:colors.muted,fontSize:16,lineHeight:24,marginBottom:12},
+  status:{color:colors.subtle,marginTop:12},
 });

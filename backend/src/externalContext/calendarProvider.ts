@@ -5,7 +5,7 @@ const unavailable=(now:Date):CalendarContext=>({state:'UNAVAILABLE',source:'ICAL
 export function parseCalendar(text:string,now:Date,observedAt=now):CalendarContext{
   const unfolded=text.replace(/\r?\n[ \t]/g,'').split(/\r?\n/);const events:{title:string;start:Date;end:Date}[]=[];let event:Record<string,string>|null=null;
   for(const line of unfolded.slice(0,5000)){if(line==='BEGIN:VEVENT'){event={};continue;}if(line==='END:VEVENT'&&event){const start=parseIcal(event.DTSTART);const end=parseIcal(event.DTEND);if(start&&end&&end>start&&end>now&&end.getTime()-start.getTime()<=86_400_000)events.push({title:safeTitle(event.SUMMARY),start,end});event=null;continue;}if(event){const separator=line.indexOf(':');if(separator>0){const key=line.slice(0,separator).split(';')[0]!;if(['DTSTART','DTEND','SUMMARY'].includes(key))event[key]=line.slice(separator+1);}}}
-  const next=events.filter((item)=>item.start>now).sort((a,b)=>a.start.getTime()-b.start.getTime())[0]??null;const age=now.getTime()-observedAt.getTime();const fresh=age<=15*60_000;
+  const next=events.sort((a,b)=>a.start.getTime()-b.start.getTime())[0]??null;const age=now.getTime()-observedAt.getTime();const fresh=age<=15*60_000;
   return{state:fresh?'AVAILABLE':'STALE',source:'ICAL',observedAt:observedAt.toISOString(),freshUntil:new Date(observedAt.getTime()+15*60_000).toISOString(),nextCommitment:next?{title:next.title,startsAt:next.start.toISOString(),endsAt:next.end.toISOString(),durationMinutes:Math.round((next.end.getTime()-next.start.getTime())/60_000),minutesUntilStart:Math.max(0,Math.floor((next.start.getTime()-now.getTime())/60_000))}:null,freeMinutesBeforeNext:next?Math.max(0,Math.floor((next.start.getTime()-now.getTime())/60_000)):null};
 }
 export class CalendarProvider{

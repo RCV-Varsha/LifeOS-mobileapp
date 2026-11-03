@@ -1,5 +1,6 @@
+import AppHeader from './src/components/AppHeader';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import GoalsScreen from './src/screens/GoalsScreen';
 import GoalOnboardingScreen from './src/screens/GoalOnboardingScreen';
@@ -9,27 +10,87 @@ import DailyReviewScreen from './src/screens/DailyReviewScreen';
 import { getCurrentSession, type CurrentSession } from './src/services/sessionService';
 import PreferencesScreen from './src/screens/PreferencesScreen';
 import MemoryScreen from './src/screens/MemoryScreen';
-import YouScreen from './src/screens/YouScreen';
+import YouScreen from './src/screens/ProfileScreen';
 import PrimaryNavigation, { type PrimaryDestination } from './src/components/PrimaryNavigation';
 import { colors } from './src/ui/theme';
-export default function App() {
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import * as NativeSplash from 'expo-splash-screen';
+import EntryGate from './src/entry/EntryGate';
+import { BrandHeader } from './src/components/LifeOSLogo';
+import ActionButton from './src/components/ActionButton';
+import WorkspaceScreen, { type WorkspaceArea } from './src/screens/WorkspaceScreen';
+import SignInScreen from './src/screens/SignInScreen';
+import { onSessionCleared, readTokens, saveTokens } from './src/services/authStorage';
+import { api } from './src/services/apiFetch';
+import HomeScreen from './src/screens/HomeScreen';
+
+void NativeSplash.preventAutoHideAsync().catch(() => {});
+
+function LifeOSApp() {
   const [session, setSession] = useState<CurrentSession | null>(null);
   const [sessionError, setSessionError] = useState(false);
-  const [screen, setScreen] = useState<'today' | 'goals' | 'you' | 'addGoal' | 'goalPlan' | 'dailyReview' | 'preferences' | 'memory'>('today');
+  const [sessionAttempt, setSessionAttempt] = useState(0);
+  const [screen, setScreen] = useState<'home' | 'today' | 'goals' | 'you' | 'addGoal' | 'goalPlan' | 'dailyReview' | 'preferences' | 'memory' | 'workspace'>('home');
+  const [workspaceArea,setWorkspaceArea]=useState<WorkspaceArea>('workspace');
+  const [needsSignIn,setNeedsSignIn]=useState(false);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [selectedGoalTitle, setSelectedGoalTitle] = useState('');
   const [reviewDate, setReviewDate] = useState('');
 
-  useEffect(() => {
-    const controller = new AbortController();
-    getCurrentSession(controller.signal).then(setSession).catch((error) => {
-      if (error instanceof Error && error.name !== 'AbortError') setSessionError(true);
-    });
-    return () => controller.abort();
-  }, []);
+  useEffect(() => onSessionCleared(() => {
+    setSession(null); setNeedsSignIn(true); setScreen('home');
+    setSelectedGoalId(null); setSelectedGoalTitle(''); setSessionError(false);
+  }), []);
 
+  async function signOut() {
+    const tokens = await readTokens();
+    // Clear this device immediately, including when the server is unreachable.
+    await saveTokens(null);
+    if (tokens) void api('/auth/logout', 'POST', { refreshToken: tokens.refreshToken }).catch(() => {});
+  }
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (screen === 'home') return false;
+      setScreen(screen === 'memory' || screen === 'preferences' ? 'you'
+        : screen === 'goalPlan' || screen === 'addGoal' ? 'goals' : 'home');
+      return true;
+    });
+    return () => subscription.remove();
+  }, [screen]);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setSessionError(false);
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    readTokens().then(async(tokens)=>{
+      if(!tokens){if(active)setNeedsSignIn(true);return;}
+      try {const value=await getCurrentSession(controller.signal);if(active){setSession(value);setNeedsSignIn(false);}}
+      catch(error){
+        if(!await readTokens()){if(active)setNeedsSignIn(true);return;}
+        // A valid locally stored account can open its offline workspace when transport fails.
+        if(error instanceof TypeError || (error instanceof Error && ['AbortError','TimeoutError'].includes(error.name))){if(active){setSession({user:tokens.user});setScreen('workspace');}return;}
+        throw error;
+      }
+    }).catch(() => {
+      if (active) setSessionError(true);
+    }).finally(() => clearTimeout(timeout));
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [sessionAttempt]);
+
+  if(needsSignIn&&!session)return <SignInScreen onSignedIn={()=>{setNeedsSignIn(false);setSessionAttempt(v=>v+1);}}/>;
   if (!session) {
-    return <View style={styles.session}><ActivityIndicator /><Text>{sessionError ? 'LifeOS could not establish the development identity.' : 'Starting LifeOS…'}</Text><StatusBar style="auto" /></View>;
+    return <View style={styles.session}><BrandHeader />
+      {!sessionError ? <ActivityIndicator color={colors.ink} /> : null}
+      <Text style={{ color: colors.muted, fontSize: 16, lineHeight: 24, textAlign: 'center' }}>{sessionError ? 'We couldn’t connect to LifeOS. Check your connection and try again.' : 'Opening your day…'}</Text>
+      {sessionError ? <ActionButton variant="primary" title="Try again" onPress={() => setSessionAttempt((value) => value + 1)} /> : null}
+      {sessionError ? <ActionButton title="Sign in again" onPress={()=>{void saveTokens(null).then(()=>setNeedsSignIn(true));}}/> : null}
+      <StatusBar style="dark" /></View>;
   }
 
   function openGoalPlan(goalId: string, goalTitle: string) {
@@ -38,12 +99,13 @@ export default function App() {
     setScreen('goalPlan');
   }
 
-  const primary:PrimaryDestination|null=screen==='today'?'now':screen==='goals'?'direction':screen==='you'?'you':null;
-  function selectPrimary(destination:PrimaryDestination){setScreen(destination==='now'?'today':destination==='direction'?'goals':'you');}
+  const primary:PrimaryDestination=screen==='home'||screen==='today'?'now':screen==='workspace'&&['planner','knowledge','assistant'].includes(workspaceArea)?workspaceArea as PrimaryDestination:'workspace';
+  function selectPrimary(destination:PrimaryDestination){if(destination==='now')setScreen('home');else {setWorkspaceArea(destination);setScreen('workspace');}}
 
   return (
     <View style={styles.app}>
-      {screen === 'today' ? (
+      <AppHeader onNavigate={area=>{setWorkspaceArea(area);setScreen('workspace');}} onGoals={()=>setScreen('goals')} onProfile={()=>setScreen('you')} onSignOut={()=>{void signOut().catch(()=>setSessionError(true));}}/>
+      {screen==='home'?<HomeScreen onProfile={()=>setScreen('you')} onDailyExecution={()=>setScreen('today')} onNavigate={area=>{setWorkspaceArea(area);setScreen('workspace');}}/>:screen==='workspace'?<WorkspaceScreen area={workspaceArea} onNavigate={setWorkspaceArea} onDeleted={()=>{setSession(null);setNeedsSignIn(true);}}/>:screen === 'today' ? (
         <TodayScreen onManageGoals={() => setScreen('goals')} onDailyReview={(date) => { setReviewDate(date); setScreen('dailyReview'); }} />
       ) : screen === 'memory' ? (
         <MemoryScreen onBack={() => setScreen('you')} />
@@ -71,10 +133,14 @@ export default function App() {
           onToday={() => setScreen('today')}
         />
       ) : null}
-      {primary?<PrimaryNavigation active={primary} onSelect={selectPrimary}/>:null}
-      <StatusBar style="auto" />
+      <PrimaryNavigation active={primary} onSelect={selectPrimary}/>
+      <StatusBar style="dark" />
     </View>
   );
+}
+
+export default function App() {
+  return <SafeAreaProvider><EntryGate><LifeOSApp /></EntryGate></SafeAreaProvider>;
 }
 
 const styles = StyleSheet.create({

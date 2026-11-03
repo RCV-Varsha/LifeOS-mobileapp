@@ -1,3 +1,4 @@
+import { apiFetch } from './apiFetch';
 import { API_URL } from '../config/api';
 
 export type TaskStatus = 'pending' | 'completed';
@@ -99,7 +100,7 @@ function parseProgress(value: unknown): TaskProgress {
 
 export async function getTodayTasks(signal: AbortSignal): Promise<TodayTasks> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/tasks/today?timeZone=${encodeURIComponent(timeZone)}`,
     { signal },
   );
@@ -128,7 +129,7 @@ export async function getTodayTasks(signal: AbortSignal): Promise<TodayTasks> {
 }
 
 export async function getGoalTasks(goalId:string,signal:AbortSignal):Promise<{tasks:LifeTask[];progress:GoalProgress}>{
-  const response=await fetch(`${API_URL}/goals/${encodeURIComponent(goalId)}/tasks`,{signal});if(!response.ok)throw new Error(`Goal tasks returned HTTP ${response.status}`);const data:unknown=await response.json();
+  const response=await apiFetch(`${API_URL}/goals/${encodeURIComponent(goalId)}/tasks`,{signal});if(!response.ok)throw new Error(`Goal tasks returned HTTP ${response.status}`);const data:unknown=await response.json();
   if(!isObject(data)||!Array.isArray(data.tasks)||!isObject(data.progress)||!isObject(data.progress.activity))throw new Error('Unexpected goal task response');
   return{tasks:data.tasks.map(parseTask),progress:{activity:parseProgress(data.progress.activity),milestone:data.progress.milestone===null?null:parseProgress(data.progress.milestone),legacyPercent:data.progress.legacyPercent as number}};
 }
@@ -141,7 +142,7 @@ async function changeTaskStatus(
   const timeout = setTimeout(() => controller.abort(), 10000);
 
   try {
-    const response = await fetch(
+    const response = await apiFetch(
       `${API_URL}/tasks/${encodeURIComponent(taskId)}/${action}`,
       { method: 'POST', signal: controller.signal },
     );

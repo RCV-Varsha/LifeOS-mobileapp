@@ -1,3 +1,4 @@
+import { apiFetch } from './apiFetch';
 import { API_URL } from '../config/api';
 
 type GoalInput = {
@@ -13,7 +14,7 @@ export async function saveGoal(input: GoalInput): Promise<string> {
   const timeout = setTimeout(() => controller.abort(), 10000);
 
   try {
-    const response = await fetch(`${API_URL}/goals`, {
+    const response = await apiFetch(`${API_URL}/goals`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -51,7 +52,7 @@ export type GoalSummary = {
 };
 
 export async function getGoals(signal: AbortSignal): Promise<GoalSummary[]> {
-  const response = await fetch(`${API_URL}/goals`, { signal });
+  const response = await apiFetch(`${API_URL}/goals`, { signal });
 
   if (!response.ok) {
     throw new Error(`Load request returned HTTP ${response.status}`);

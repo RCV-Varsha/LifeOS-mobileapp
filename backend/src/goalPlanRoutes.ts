@@ -10,6 +10,7 @@ import {
   type ProposedPlan,
 } from './ai/planSchema.ts';
 import { currentUser } from './auth.ts';
+import {readProfile} from './profile.ts';
 
 export const goalPlanRouter = Router();
 
@@ -132,6 +133,7 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
           goal: goal.goal,
           reason: goal.reason,
           minutesPerDay: goal.minutesPerDay,
+          profile: (await readProfile(pool,ownerId)).profile,
         });
 
         const savedResult = await pool.query<SavedGoalPlan>(
@@ -207,7 +209,7 @@ goalPlanRouter.post('/:goalId/plan', async (req, res) => {
     }
 
     res.status(502).json({
-      error: 'The AI service could not generate a valid plan.',
+      error: 'Your plan could not be generated. Nothing was added. Please try again.',
       code: 'ai_unavailable',
     });
   }

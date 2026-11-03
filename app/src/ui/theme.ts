@@ -1,5 +1,8 @@
-export const colors={paper:'#f7f2e8',paperRaised:'#fffdf8',ink:'#20251f',muted:'#625d54',subtle:'#81796d',green:'#486553',greenSoft:'#e5eee7',amber:'#956322',amberSoft:'#fff9ed',line:'#d9d1c3',input:'#aaa193',danger:'#9b3d35'} as const;
+export const colors={paper:'#F7F6F2',paperRaised:'#FFFFFF',ink:'#202627',muted:'#60666A',subtle:'#6D7275',green:'#45685C',greenSoft:'#EAF0EC',amber:'#876126',amberSoft:'#F7F0E3',line:'#E3E3DE',input:'#A0A5A4',danger:'#A13F3B',stone:'#EEEDE8',sand:'#D6C8B8',onInk:'#FAF8F3'} as const;
 
-export const screen={flexGrow:1 as const,paddingHorizontal:24,paddingTop:54,paddingBottom:42,backgroundColor:colors.paper};
-export const typography={eyebrow:{color:colors.green,fontWeight:'800' as const,letterSpacing:1.5},heading:{fontSize:30,lineHeight:37,fontWeight:'700' as const,color:colors.ink,marginTop:8},muted:{color:colors.muted,lineHeight:21}};
-export const input={borderWidth:1,borderColor:colors.input,borderRadius:8,padding:11,fontSize:16,color:colors.ink,backgroundColor:colors.paperRaised};
+export const spacing={xs:4,sm:8,md:16,lg:24,xl:32} as const;
+export const radius={input:12,card:18,pill:999} as const;
+export const surface={backgroundColor:colors.paperRaised,borderWidth:1,borderColor:colors.line,borderRadius:radius.card,padding:20};
+export const screen={flexGrow:1 as const,paddingHorizontal:24,paddingTop:20,paddingBottom:32,backgroundColor:colors.paper};
+export const typography={eyebrow:{fontSize:11,color:colors.muted,fontWeight:'700' as const,letterSpacing:1.8},heading:{fontSize:30,lineHeight:37,fontWeight:'700' as const,color:colors.ink,marginTop:8},muted:{fontSize:14,color:colors.muted,lineHeight:21}};
+export const input={minHeight:48,borderWidth:1,borderColor:colors.input,borderRadius:radius.input,padding:12,fontSize:16,color:colors.ink,backgroundColor:colors.paperRaised};

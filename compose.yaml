@@ -1,0 +1,36 @@
+services:
+  database:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${PGDATABASE:?Set PGDATABASE}
+      POSTGRES_USER: ${PGUSER:?Set PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD:?Set PGPASSWORD}
+    volumes:
+      - lifeos-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  lifeos:
+    build: .
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${LIFEOS_PORT:-3000}:3000"
+    environment:
+      PGHOST: database
+      PGPORT: 5432
+      PGDATABASE: ${PGDATABASE:?Set PGDATABASE}
+      PGUSER: ${PGUSER:?Set PGUSER}
+      PGPASSWORD: ${PGPASSWORD:?Set PGPASSWORD}
+      WEB_ORIGINS: ${WEB_ORIGINS:?Set the public HTTPS origin}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-}
+      EMBEDDING_API_URL: ${EMBEDDING_API_URL:-}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+    command: ["sh", "-c", "node --experimental-strip-types src/migrate.ts && node --experimental-strip-types src/server.ts"]
+volumes:
+  lifeos-data:

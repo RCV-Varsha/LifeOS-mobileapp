@@ -1,4 +1,5 @@
 import express from 'express'
+import { fileURLToPath } from 'node:url';
 import { pool } from './db.ts';
 import { goalPlanRouter } from './goalPlanRoutes.ts';
 import { taskRouter } from './taskRoutes.ts';
@@ -6,7 +7,13 @@ import { dailyReviewRouter } from './dailyReviewRoutes.ts';
 import { adaptivePlanningRouter } from './adaptivePlanningRoutes.ts';
 import { outcomeRouter } from './outcomeRoutes.ts';
 import { validateMilestoneInput, validateOutcomeInput } from './outcomes/validation.ts';
-import { currentUser, developmentAuthentication, rejectClientOwnership } from './auth.ts';
+import { currentUser, rejectClientOwnership } from './auth.ts';
+import { authentication, authRouter } from './platform/authentication.ts';
+import { workspaceRouter, apiErrors } from './workspace/routes.ts';
+import { extensionRouter } from './workspace/extensionRoutes.ts';
+import { privacyRouter } from './platform/privacy.ts';
+import { profileRouter } from './profile.ts';
+import { agentRouter } from './workspace/agents.ts';
 import { preferenceRouter } from './preferenceRoutes.ts';
 import { memoryRouter } from './memoryRoutes.ts';
 import { nowRouter } from './nowRoutes.ts';
@@ -19,12 +26,23 @@ const configuredPort = Number(process.env.PORT ?? 3000);
 const port = Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort <= 65535
   ? configuredPort
   : 3000;
-app.use(express.json({ limit: '10kb' }));
+app.disable('x-powered-by');
+app.use((req,res,next)=>{
+  const origin=req.headers.origin;
+  const allowed=(process.env.WEB_ORIGINS??'http://localhost:8081,http://localhost:8082').split(',');
+  if(origin&&allowed.includes(origin)) {res.set('Access-Control-Allow-Origin',origin);res.set('Vary','Origin');res.set('Access-Control-Allow-Headers','Content-Type,Authorization,Idempotency-Key');res.set('Access-Control-Allow-Methods','GET,POST,PUT,DELETE,OPTIONS');}
+  res.set('X-Content-Type-Options','nosniff');
+  if(req.method==='OPTIONS'){res.status(204).end();return;}
+  next();
+});
+app.use(express.json({ limit: '256kb' }));
 app.get('/health',(req,res)=>{
     res.status(200).json({ status:'ok' })
 })
+if(process.env.SERVE_WEB==='1')app.use(express.static(fileURLToPath(new URL('../../app/dist-web/',import.meta.url))));
 app.use(rejectClientOwnership);
-app.use(developmentAuthentication(pool));
+app.use('/auth',authRouter(pool));
+app.use(authentication(pool));
 app.get('/me', (req, res) => {
   const user = currentUser(req);
   res.set('Cache-Control', 'no-store');
@@ -37,6 +55,11 @@ app.use(outcomeRouter);
 app.use(preferenceRouter);
 app.use(memoryRouter);
 app.use(nowRouter);
+app.use(workspaceRouter(pool));
+app.use(extensionRouter(pool));
+app.use(privacyRouter(pool));
+app.use(profileRouter(pool));
+app.use(agentRouter(pool));
 app.use('/goals', goalPlanRouter);
 app.post('/goals', async (req, res) => {
   const ownerId = currentUser(req).id;
@@ -167,6 +190,7 @@ app.get('/goals', async (req, res) => {
   }
 });
 
+app.use(apiErrors);
 app.listen(port,'0.0.0.0',()=>{
     console.log(`LifeOS backend: http://127.0.0.1:${port}`);
 })

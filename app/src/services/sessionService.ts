@@ -1,3 +1,4 @@
+import { apiFetch } from './apiFetch';
 import { API_URL } from '../config/api';
 
 export type CurrentSession = {
@@ -8,7 +9,7 @@ export type CurrentSession = {
 };
 
 export async function getCurrentSession(signal: AbortSignal): Promise<CurrentSession> {
-  const response = await fetch(`${API_URL}/me`, { signal });
+  const response = await apiFetch(`${API_URL}/me`, { signal });
   if (!response.ok) throw new Error(`Identity request returned HTTP ${response.status}`);
   const value: unknown = await response.json();
   if (

@@ -1,3 +1,4 @@
+import { apiFetch } from './apiFetch';
 import { API_URL } from '../config/api';
 
 export type Memory={id:string;versionId:string;key:'planning.daily_buffer_minutes';category:'CONSTRAINT';value:number;source:'USER_EXPLICIT'|'USER_CONFIRMED_AI_SUGGESTION'|'USER_CORRECTION';status:'ACTIVE'|'ARCHIVED'|'SUPERSEDED';revision:number;note:string|null;createdAt:string;updatedAt:string};
@@ -6,8 +7,8 @@ export type MemoryHistory={versions:Memory[];corrections:{id:string;revision:num
 function object(value:unknown):value is Record<string,unknown>{return typeof value==='object'&&value!==null&&!Array.isArray(value);}
 async function body(response:Response){const value:unknown=await response.json().catch(()=>null);if(!response.ok)throw new Error(object(value)&&typeof value.error==='string'?value.error:`Request returned HTTP ${response.status}`);return value;}
 function memory(value:unknown):Memory{if(!object(value)||typeof value.id!=='string'||typeof value.versionId!=='string'||value.key!=='planning.daily_buffer_minutes'||value.category!=='CONSTRAINT'||typeof value.value!=='number'||!['USER_EXPLICIT','USER_CONFIRMED_AI_SUGGESTION','USER_CORRECTION'].includes(String(value.source))||!['ACTIVE','ARCHIVED','SUPERSEDED'].includes(String(value.status))||typeof value.revision!=='number')throw new Error('Unexpected memory response');return value as Memory;}
-async function request(path:string,method='GET',input?:unknown){return body(await fetch(`${API_URL}${path}`,{method,headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input)}));}
-export async function getMemories(signal:AbortSignal){const value=await body(await fetch(`${API_URL}/memories`,{signal}));if(!object(value)||!Array.isArray(value.memories))throw new Error('Unexpected memories response');return value.memories.map(memory);}
+async function request(path:string,method='GET',input?:unknown){return body(await apiFetch(`${API_URL}${path}`,{method,headers:input===undefined?{}:{'Content-Type':'application/json'},body:input===undefined?undefined:JSON.stringify(input)}));}
+export async function getMemories(signal:AbortSignal){const value=await body(await apiFetch(`${API_URL}/memories`,{signal}));if(!object(value)||!Array.isArray(value.memories))throw new Error('Unexpected memories response');return value.memories.map(memory);}
 export async function createMemory(value:number){const result=await request('/memories','POST',{key:'planning.daily_buffer_minutes',category:'CONSTRAINT',value});return memory(object(result)?result.memory:null);}
 export async function updateMemory(item:Memory,value:number){const result=await request(`/memories/${encodeURIComponent(item.id)}`,'PUT',{value,expectedRevision:item.revision});return memory(object(result)?result.memory:null);}
 export async function correctMemory(item:Memory,value:number,note?:string){const result=await request(`/memories/${encodeURIComponent(item.id)}/correct`,'POST',{value,expectedRevision:item.revision,...(note?.trim()?{note:note.trim()}:{})});return memory(object(result)?result.memory:null);}

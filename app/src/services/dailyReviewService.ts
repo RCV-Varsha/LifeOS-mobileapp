@@ -1,3 +1,4 @@
+import { apiFetch } from './apiFetch';
 import { API_URL } from '../config/api';
 
 export type ReviewMetrics = {
@@ -92,7 +93,7 @@ function requestUrl(date: string) {
 }
 
 export async function getDailyReview(date: string, signal: AbortSignal) {
-  const response = await fetch(requestUrl(date), { signal });
+  const response = await apiFetch(requestUrl(date), { signal });
   if (!response.ok) throw new DailyReviewRequestError('Could not load the daily review.', null);
   const data: unknown = await response.json();
   if (!isObject(data)) throw new Error('Unexpected daily review response');
@@ -103,7 +104,7 @@ export async function generateDailyReview(date: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 65000);
   try {
-    const response = await fetch(requestUrl(date), { method: 'POST', signal: controller.signal });
+    const response = await apiFetch(requestUrl(date), { method: 'POST', signal: controller.signal });
     const data: unknown = await response.json().catch(() => null);
     if (!response.ok) {
       const code = isObject(data) && typeof data.code === 'string' ? data.code : null;

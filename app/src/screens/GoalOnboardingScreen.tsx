@@ -1,7 +1,9 @@
+import Disclosure from '../components/Disclosure';
+import ScrollView from '../components/ScreenScroll';
+import Button from '../components/ActionButton';
+import { colors, typography, input as fieldStyle } from '../ui/theme';
 import { useState } from 'react';
 import {
-  Button,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -172,12 +174,12 @@ export default function GoalOnboardingScreen({
             keyboardType="number-pad"
           />
 
-          <Text style={styles.label}>What would meaningful success look like? (optional)</Text>
+          <Disclosure title="Success and steps (optional)"><Text style={styles.label}>What would meaningful success look like?</Text>
           <TextInput accessibilityLabel="Desired outcome" style={[styles.input,styles.multiline]} value={outcome} onChangeText={setOutcome} placeholder="Build and deploy a small Python application" multiline maxLength={200}/>
           <Text style={styles.label}>Outcome target date (optional)</Text>
           <TextInput accessibilityLabel="Outcome target date" style={styles.input} value={targetDate} onChangeText={setTargetDate} placeholder="YYYY-MM-DD" maxLength={10}/>
-          <Text style={styles.label}>Milestones (optional, one per line)</Text>
-          <TextInput accessibilityLabel="Milestones, one per line" style={[styles.input,styles.multiline]} value={milestones} onChangeText={setMilestones} placeholder={'Learn fundamentals\nBuild the application\nDeploy it'} multiline/>
+          <Text style={styles.label}>Steps (optional, one per line)</Text>
+          <TextInput accessibilityLabel="Milestones, one per line" style={[styles.input,styles.multiline]} value={milestones} onChangeText={setMilestones} placeholder={'Learn fundamentals\nBuild the application\nDeploy it'} multiline/></Disclosure>
 
           {error ? (
             <Text style={styles.error} accessibilityLiveRegion="polite">
@@ -186,7 +188,7 @@ export default function GoalOnboardingScreen({
           ) : null}
 
           <Text style={styles.note}>You can review this before saving.</Text>
-          <Button title="Review goal" onPress={reviewGoal} />
+          <Button variant="primary" title="Review goal" onPress={reviewGoal} />
         </>
       )}
       <Text style={styles.note}>Cancel discards this unsaved draft.</Text>
@@ -200,21 +202,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 54,
     paddingBottom: 42,
-    backgroundColor: '#f7f2e8',
+    backgroundColor: colors.paper,
   },
-  eyebrow:{color:'#486553',fontWeight:'800',letterSpacing:1.5,marginTop:24},
-  heading: { fontSize: 30, lineHeight:37, color:'#20251f', fontWeight: '700', marginTop:8, marginBottom: 16 },
-  label: { fontSize: 15, color:'#486553', fontWeight: '700', marginTop: 20, marginBottom: 8 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#aaa193',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: '#20251f',
-    backgroundColor:'#fffdf8',
-  },
+  eyebrow:{...typography.eyebrow,marginTop:16},
+  heading: { fontSize: 30, lineHeight:37, color:colors.ink, fontWeight: '700', marginTop:8, marginBottom: 16 },
+  label: { fontSize: 15, color:colors.green, fontWeight: '700', marginTop: 20, marginBottom: 8 },
+  input:{...fieldStyle,marginVertical:8},
   multiline: { minHeight: 100, textAlignVertical: 'top' },
-  note: { color: '#625d54', lineHeight:21, marginVertical: 24 },
-  error: { color: '#9b3d35', marginTop: 16 },
+  note: { color: colors.muted, lineHeight:21, marginVertical: 24 },
+  error: { color: colors.danger, marginTop: 16 },
 });

@@ -5,7 +5,7 @@ import { validateAdaptiveExplanation } from './explanationSchema.ts';
 import { generateAdaptiveExplanation } from './groqExplanationService.ts';
 import { evaluateDailyPlan, validateEditedSelection } from './planner.ts';
 import type { PlanningTask } from './types.ts';
-import { AdaptiveConflictError } from './adaptivePlanningRepository.ts';
+import { AdaptiveConflictError, AdaptivePlanningRepository } from './adaptivePlanningRepository.ts';
 import type { AdaptivePlanningContext } from '../context/types.ts';
 
 const originalFetch=globalThis.fetch;
@@ -29,6 +29,18 @@ test('edited selection can remove and add eligible tasks',()=>assert.deepEqual(v
 test('edited selection rejects over-allocation',()=>assert.throws(()=>validateEditedSelection([task('a',20)],10,[{taskId:'a',allocationMinutes:11}])));
 test('edited selection rejects unknown task IDs',()=>assert.throws(()=>validateEditedSelection([task('a',20)],30,[{taskId:'b',allocationMinutes:10}])));
 test('edited selection rejects duplicate tasks',()=>assert.throws(()=>validateEditedSelection([task('a',20)],30,[{taskId:'a',allocationMinutes:10},{taskId:'a',allocationMinutes:10}])));
+
+test('current-plan reads exclude tasks omitted by an accepted daily overlay',async()=>{
+  const acceptedAt=new Date('2026-09-08T08:00:00Z');
+  const rows=[
+    {...task('a',20),acceptedAt,dayNumber:1,dailySelected:true,dailyPlanActive:true},
+    {...task('b',20),acceptedAt,dayNumber:1,dailySelected:false,dailyPlanActive:true},
+  ];
+  const repository=new AdaptivePlanningRepository({query:async()=>({rows})} as never);
+  const date=calendarDay(acceptedAt,'UTC');
+  assert.deepEqual((await repository.tasksForDate('owner',date,'UTC')).map((item)=>item.id),['a','b']);
+  assert.deepEqual((await repository.currentPlanTasksForDate('owner',date,'UTC')).map((item)=>item.id),['a']);
+});
 
 test('timezone boundary selects distinct local calendar dates',()=>{const instant=new Date('2026-09-08T00:30:00Z');assert.equal(calendarDay(instant,'Asia/Kolkata').isoDate,'2026-09-08');assert.equal(calendarDay(instant,'America/Los_Angeles').isoDate,'2026-09-07');});
 test('DST transition uses local calendar dates',()=>{assert.equal(calendarDay(new Date('2026-03-08T07:30:00Z'),'America/New_York').isoDate,'2026-03-08');assert.equal(calendarDay(new Date('2026-03-09T03:30:00Z'),'America/New_York').isoDate,'2026-03-08');});

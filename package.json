@@ -1,0 +1,17 @@
+{
+  "name": "LifeOS",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "android": "npm --prefix app run android --",
+    "ios": "npm --prefix app run ios --",
+    "start": "npm --prefix app run start --"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-native": "^0.76.0"
+  },
+  "devDependencies": {
+    "@react-native-community/cli": "^15.0.0"
+  }
+}

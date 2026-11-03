@@ -1,0 +1,12 @@
+.git
+**/node_modules
+**/.env
+**/.env.*
+**/android
+**/ios
+**/build
+**/dist
+**/dist-web
+**/.expo
+**/*.log
+**/.gradle

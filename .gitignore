@@ -10,6 +10,8 @@ node_modules/
 
 # Generated output
 dist/
+dist-web/
+dist-android/
 build/
 coverage/
 .expo/
@@ -20,3 +22,7 @@ coverage/
 # Operating-system metadata
 .DS_Store
 Thumbs.db
+
+app/dist*/
+app/build/
+.presentation-build/

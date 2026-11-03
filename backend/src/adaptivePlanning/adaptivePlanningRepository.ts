@@ -102,19 +102,32 @@ export class AdaptivePlanningRepository {
   }
 
   async tasksForDate(ownerId: string, date: { key: number }, timeZone: string): Promise<PlanningTask[]> {
-    const result = await this.pool.query<PlanningTask & { acceptedAt: Date; dayNumber: number; dailySelected: boolean }>(
+    return this.loadTasksForDate(ownerId, date, timeZone, false);
+  }
+
+  async currentPlanTasksForDate(ownerId: string, date: { key: number }, timeZone: string): Promise<PlanningTask[]> {
+    return this.loadTasksForDate(ownerId, date, timeZone, true);
+  }
+
+  private async loadTasksForDate(ownerId: string, date: { key: number }, timeZone: string, acceptedOverlayOnly: boolean): Promise<PlanningTask[]> {
+    const result = await this.pool.query<PlanningTask & { acceptedAt: Date; dayNumber: number; dailySelected: boolean; dailyPlanActive: boolean }>(
       `SELECT t.id,gp.goal_id AS "goalId",gp.id AS "goalPlanId",gp.goal_title AS "goalTitle",
        t.instruction,t.planned_minutes AS "estimatedMinutes",t.status,g.priority AS "goalPriority",
        floor(extract(epoch from gp.accepted_at))::bigint AS "planOrder",t.position AS "taskOrder",
        t.revision,gp.version AS "planVersion",gp.accepted_at AS "acceptedAt",t.day_number AS "dayNumber",
        EXISTS(SELECT 1 FROM public.daily_plan_items dpi INNER JOIN public.daily_plans dp ON dp.id=dpi.daily_plan_id
-         WHERE dpi.task_id=t.id AND dp.owner_id=$1 AND dp.local_date=$2 AND dp.time_zone=$3) AS "dailySelected"
+         WHERE dpi.task_id=t.id AND dpi.owner_id=$1 AND dp.owner_id=$1 AND dp.local_date=$2 AND dp.time_zone=$3 AND dp.active=TRUE) AS "dailySelected",
+       EXISTS(SELECT 1 FROM public.daily_plans dp
+         WHERE dp.owner_id=$1 AND dp.local_date=$2 AND dp.time_zone=$3 AND dp.active=TRUE) AS "dailyPlanActive"
        FROM public.tasks t INNER JOIN public.goal_plans gp ON gp.id=t.goal_plan_id
        INNER JOIN public.goals g ON g.id=gp.goal_id
        WHERE t.owner_id=$1 AND gp.owner_id=$1 AND g.owner_id=$1 AND gp.status='accepted' AND gp.accepted_at IS NOT NULL
        ORDER BY gp.accepted_at,gp.goal_id,t.day_number,t.position`, [ownerId, dateKeyToIso(date.key), timeZone]);
-    return result.rows.filter((task) => task.dailySelected || date.key - calendarDay(task.acceptedAt,timeZone).key + 1 === task.dayNumber)
-      .map(({acceptedAt:_a,dayNumber:_d,dailySelected:_s,...task}) => ({...task,planOrder:-Number(task.planOrder)}));
+    return result.rows
+      .filter((task) => acceptedOverlayOnly && task.dailyPlanActive
+        ? task.dailySelected
+        : task.dailySelected || date.key - calendarDay(task.acceptedAt,timeZone).key + 1 === task.dayNumber)
+      .map(({acceptedAt:_a,dayNumber:_d,dailySelected:_s,dailyPlanActive:_p,...task}) => ({...task,planOrder:-Number(task.planOrder)}));
   }
 
   async dailyPlanVersion(ownerId: string, date: string, timeZone: string) {
@@ -265,7 +278,10 @@ async function itemsForPlan(client:PoolClient,ownerId:string,id:string):Promise<
 async function assertVersions(client:PoolClient,ownerId:string,tasks:Record<string,number>,plans:Record<string,number>){
   const taskIds=Object.keys(tasks);const planIds=Object.keys(plans);
   const taskRows=await client.query<{id:string;revision:number;status:string}>('SELECT id,revision,status FROM public.tasks WHERE owner_id=$1 AND id=ANY($2::uuid[]) FOR UPDATE',[ownerId,taskIds]);
-  if(taskRows.rows.length!==taskIds.length||taskRows.rows.some((row)=>row.status!=='pending'||tasks[row.id]!==row.revision)) throw new AdaptiveConflictError('stale');
+  // Completed tasks may already be part of the proposal's source snapshot.
+  // Revisions detect subsequent status changes; selected items are checked for
+  // pending status again when inserting the accepted allocation.
+  if(taskRows.rows.length!==taskIds.length||taskRows.rows.some((row)=>tasks[row.id]!==row.revision)) throw new AdaptiveConflictError('stale');
   const planRows=await client.query<{id:string;version:number}>('SELECT id,version FROM public.goal_plans WHERE owner_id=$1 AND id=ANY($2::uuid[]) FOR UPDATE',[ownerId,planIds]);
   if(planRows.rows.length!==planIds.length||planRows.rows.some((row)=>plans[row.id]!==row.version)) throw new AdaptiveConflictError('stale');
 }

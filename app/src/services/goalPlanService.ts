@@ -1,3 +1,4 @@
+import { apiFetch } from './apiFetch';
 import { API_URL } from '../config/api';
 
 export type PlanAction = {
@@ -167,7 +168,7 @@ export async function getGoalPlan(
   goalId: string,
   signal: AbortSignal,
 ): Promise<GoalPlan | null> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_URL}/goals/${encodeURIComponent(goalId)}/plan`,
     { signal },
   );
@@ -195,7 +196,7 @@ export async function generateGoalPlan(goalId: string): Promise<GoalPlan> {
   let response: Response;
 
   try {
-    response = await fetch(
+    response = await apiFetch(
       `${API_URL}/goals/${encodeURIComponent(goalId)}/plan`,
       { method: 'POST', signal: controller.signal },
     );
@@ -232,7 +233,7 @@ export async function acceptGoalPlan(
   let response: Response;
 
   try {
-    response = await fetch(
+    response = await apiFetch(
       `${API_URL}/goals/${encodeURIComponent(goalId)}/plan/accept`,
       { method: 'POST', signal: controller.signal },
     );

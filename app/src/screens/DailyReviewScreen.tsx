@@ -1,5 +1,8 @@
+import ScrollView from '../components/ScreenScroll';
+import Button from '../components/ActionButton';
+import { colors, surface, typography } from '../ui/theme';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Button, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { DailyReviewRequestError, generateDailyReview, getDailyReview, type DailyReview, type ReviewMetrics } from '../services/dailyReviewService';
 import TextAction from '../components/TextAction';
 
@@ -43,23 +46,23 @@ export default function DailyReviewScreen({ date, onBack, onReplan }: Props) {
 
   return <ScrollView contentContainerStyle={styles.container}>
     <TextAction label="Back to NOW" onPress={onBack} disabled={isGenerating} />
-    <Text style={styles.eyebrow}>DAILY REVIEW</Text><Text style={styles.heading}>Your insight</Text><Text style={styles.date}>{date}</Text>
+    <Text style={styles.eyebrow}>DAILY REVIEW</Text><Text style={styles.heading}>A moment to reflect</Text><Text style={styles.date}>{date}</Text>
     {isLoading ? <ActivityIndicator style={styles.loading} size="large" /> : error && !metrics ? <View style={styles.message}><Text style={styles.error}>{error}</Text><Button title="Try again" onPress={() => setReload((value) => value + 1)} /></View> : metrics ? <>
       <View style={styles.summary}><Text style={styles.percent}>{metrics.completionRate}%</Text><Text style={styles.count}>{metrics.completedTasks} completed · {metrics.incompleteTasks} incomplete</Text><Text style={styles.muted}>{metrics.goals.length} goal{metrics.goals.length === 1 ? '' : 's'} represented</Text></View>
       {metrics.milestoneProgress.length>0?<View style={styles.milestones}><Text style={styles.sectionTitle}>Achievement progress</Text>{metrics.milestoneProgress.map((item)=><Text key={item.goalId} style={styles.item}>{item.goalTitle}: {item.completed}/{item.total} milestones ({item.percent}%){item.outcomeTitle?`\nOutcome: ${item.outcomeTitle}`:''}</Text>)}<Text style={styles.muted}>Milestones change only when you explicitly confirm them.</Text></View>:null}
-      {metrics.totalTasks === 0 ? <View style={styles.message}><Text style={styles.sectionTitle}>No tasks to review</Text><Text style={styles.muted}>There was no scheduled execution data for this date.</Text></View> : review ? <>
+      {metrics.totalTasks === 0 ? <View style={styles.message}><Text style={styles.sectionTitle}>No tasks to review</Text><Text style={styles.muted}>No tasks were scheduled for this day.</Text></View> : review ? <>
         <Text style={styles.aiSummary}>{review.insight.summary}</Text>
         <Section title="Observations" items={review.insight.observations} /><Section title="Strengths" items={review.insight.strengths} /><Section title="Areas to improve" items={review.insight.areasToImprove} />
-        <View style={styles.next}><Text style={styles.sectionTitle}>Recommended next action</Text><Text style={styles.item}>{review.insight.recommendedNextAction}</Text><Text style={styles.muted}>Did your available time or priority change?</Text><Button title="Re-plan today" onPress={onReplan} /></View>
-      </> : <View style={styles.message}><Text style={styles.sectionTitle}>Insight not generated yet</Text><Text style={styles.muted}>Generate a review when you are ready. It will use the execution snapshot shown above.</Text><Button title={isGenerating ? 'Generating…' : 'Generate AI insight'} onPress={() => void generate()} disabled={isGenerating} /></View>}
+        <View style={styles.next}><Text style={styles.sectionTitle}>Recommended next action</Text><Text style={styles.item}>{review.insight.recommendedNextAction}</Text><Text style={styles.muted}>Did your available time or priority change?</Text><Button title="Return to your day" onPress={onReplan} /></View>
+      </> : <View style={styles.message}><Text style={styles.sectionTitle}>Insight not generated yet</Text><Text style={styles.muted}>Generate a review when you are ready. It will reflect on the progress shown above.</Text><Button title={isGenerating ? 'Generating…' : 'Generate AI insight'} onPress={() => void generate()} disabled={isGenerating} /></View>}
     </> : null}
     {error && metrics ? <Text style={styles.error}>{error}</Text> : null}
   </ScrollView>;
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 54, paddingBottom: 42, backgroundColor: '#f7f2e8' },
-  eyebrow: { color: '#486553', fontWeight: '800', letterSpacing: 1.5, marginTop: 24 }, heading: { fontSize: 30, lineHeight:37, color:'#20251f', fontWeight: '700', marginTop: 8 }, date: { color: '#81796d', marginTop: 6 }, loading: { marginTop: 48 },
-  summary: { paddingVertical: 20, marginTop: 24, borderTopWidth:2,borderBottomWidth:1,borderColor:'#76907e' }, percent: { fontSize: 36, fontWeight: '800', color: '#486553' }, count: { fontSize: 17, color:'#20251f', fontWeight: '700', marginTop: 5 }, muted: { color: '#625d54', lineHeight: 21, marginTop: 6 },
-  aiSummary: { fontSize: 19, color:'#20251f', lineHeight: 27, marginTop: 26 }, milestones:{marginTop:18,paddingVertical:16,borderBottomWidth:1,borderBottomColor:'#d9d1c3'}, section: { marginTop: 24 }, sectionTitle: { fontSize: 18, color:'#20251f', fontWeight: '700', marginBottom: 8 }, item: { fontSize: 16, color:'#20251f', lineHeight: 23, marginBottom: 7 }, next: { marginTop: 26, padding: 17, borderLeftWidth:3,borderLeftColor:'#486553', backgroundColor: '#e5eee7' }, message: { gap: 14, marginTop: 32 }, error: { color: '#9b3d35', marginTop: 18 },
+  container: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 54, paddingBottom: 42, backgroundColor: colors.paper },
+  eyebrow:{...typography.eyebrow,marginTop:16}, heading: { fontSize: 30, lineHeight:37, color:colors.ink, fontWeight: '700', marginTop: 8 }, date: { color: colors.subtle, marginTop: 6 }, loading: { marginTop: 48 },
+  summary: { ...surface, paddingVertical: 24, marginTop: 24, borderTopWidth:2,borderBottomWidth:1,borderColor:colors.green }, percent: { fontSize: 36, fontWeight: '800', color: colors.green }, count: { fontSize: 17, color:colors.ink, fontWeight: '700', marginTop: 5 }, muted: { color: colors.muted, lineHeight: 21, marginTop: 6 },
+  aiSummary: { fontSize: 19, color:colors.ink, lineHeight: 27, marginTop: 26 }, milestones:{marginTop:18,paddingVertical:16,borderBottomWidth:1,borderBottomColor:colors.line}, section: { marginTop: 24 }, sectionTitle: { fontSize: 18, color:colors.ink, fontWeight: '700', marginBottom: 8 }, item: { fontSize: 16, color:colors.ink, lineHeight: 23, marginBottom: 7 }, next: { marginTop: 26, padding: 17, borderLeftWidth:3,borderLeftColor:colors.green, backgroundColor: colors.greenSoft }, message: { gap: 14, marginTop: 32 }, error: { color: colors.danger, marginTop: 18 },
 });

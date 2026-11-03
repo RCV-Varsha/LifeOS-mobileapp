@@ -1,3 +1,4 @@
+import { apiFetch } from './apiFetch';
 import { API_URL } from '../config/api';
 
 export type PreferenceKey='planning.max_major_tasks'|'interaction.explanation_length';
@@ -9,9 +10,9 @@ export type PreferenceHistory={versions:Preference[];corrections:{id:string;revi
 function object(value:unknown):value is Record<string,unknown>{return typeof value==='object'&&value!==null&&!Array.isArray(value);}
 async function responseBody(response:Response){const value:unknown=await response.json().catch(()=>null);if(!response.ok)throw new Error(object(value)&&typeof value.error==='string'?value.error:`Request returned HTTP ${response.status}`);return value;}
 function preference(value:unknown):Preference{if(!object(value)||typeof value.id!=='string'||typeof value.versionId!=='string'||!['planning.max_major_tasks','interaction.explanation_length'].includes(String(value.key))||!['PLANNING','INTERACTION'].includes(String(value.category))||!(typeof value.value==='number'||value.value==='concise'||value.value==='standard')||!['USER_EXPLICIT','USER_CORRECTION'].includes(String(value.source))||!['ACTIVE','ARCHIVED','SUPERSEDED'].includes(String(value.status))||typeof value.revision!=='number')throw new Error('Unexpected preference response');return value as Preference;}
-async function request(path:string,method='GET',body?:unknown){return responseBody(await fetch(`${API_URL}${path}`,{method,headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}));}
+async function request(path:string,method='GET',body?:unknown){return responseBody(await apiFetch(`${API_URL}${path}`,{method,headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}));}
 
-export async function getPreferences(signal:AbortSignal){const value=await responseBody(await fetch(`${API_URL}/preferences`,{signal}));if(!object(value)||!Array.isArray(value.preferences))throw new Error('Unexpected preferences response');return value.preferences.map(preference);}
+export async function getPreferences(signal:AbortSignal){const value=await responseBody(await apiFetch(`${API_URL}/preferences`,{signal}));if(!object(value)||!Array.isArray(value.preferences))throw new Error('Unexpected preferences response');return value.preferences.map(preference);}
 export async function createPreference(key:PreferenceKey,category:PreferenceCategory,value:Preference['value']){const result=await request('/preferences','POST',{key,category,value});return preference(object(result)?result.preference:null);}
 export async function updatePreference(item:Preference,value:Preference['value']){const result=await request(`/preferences/${encodeURIComponent(item.id)}`,'PUT',{value,expectedRevision:item.revision});return preference(object(result)?result.preference:null);}
 export async function correctPreference(item:Preference,value:Preference['value'],note?:string){const result=await request(`/preferences/${encodeURIComponent(item.id)}/correct`,'POST',{value,expectedRevision:item.revision,...(note?.trim()?{note:note.trim()}:{})});return preference(object(result)?result.preference:null);}
