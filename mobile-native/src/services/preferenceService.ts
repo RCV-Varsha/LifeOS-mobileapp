@@ -1,0 +1,23 @@
+import { apiFetch } from './apiFetch';
+import { API_URL } from '../config/api';
+
+export type PreferenceKey='planning.max_major_tasks'|'interaction.explanation_length';
+export type PreferenceCategory='PLANNING'|'INTERACTION';
+export type Preference={id:string;versionId:string;key:PreferenceKey;category:PreferenceCategory;value:number|'concise'|'standard';source:'USER_EXPLICIT'|'USER_CORRECTION';status:'ACTIVE'|'ARCHIVED'|'SUPERSEDED';revision:number;note:string|null;createdAt:string;updatedAt:string};
+export type PreferenceSuggestion={key:PreferenceKey;category:PreferenceCategory;value:Preference['value'];reason:string};
+export type PreferenceHistory={versions:Preference[];corrections:{id:string;revision:number;previousVersionId:string;newVersionId:string;note:string|null;createdAt:string}[]};
+
+function object(value:unknown):value is Record<string,unknown>{return typeof value==='object'&&value!==null&&!Array.isArray(value);}
+async function responseBody(response:Response){const value:unknown=await response.json().catch(()=>null);if(!response.ok)throw new Error(object(value)&&typeof value.error==='string'?value.error:`Request returned HTTP ${response.status}`);return value;}
+function preference(value:unknown):Preference{if(!object(value)||typeof value.id!=='string'||typeof value.versionId!=='string'||!['planning.max_major_tasks','interaction.explanation_length'].includes(String(value.key))||!['PLANNING','INTERACTION'].includes(String(value.category))||!(typeof value.value==='number'||value.value==='concise'||value.value==='standard')||!['USER_EXPLICIT','USER_CORRECTION'].includes(String(value.source))||!['ACTIVE','ARCHIVED','SUPERSEDED'].includes(String(value.status))||typeof value.revision!=='number')throw new Error('Unexpected preference response');return value as Preference;}
+async function request(path:string,method='GET',body?:unknown){return responseBody(await apiFetch(`${API_URL}${path}`,{method,headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}));}
+
+export async function getPreferences(signal:AbortSignal){const value=await responseBody(await apiFetch(`${API_URL}/preferences`,{signal}));if(!object(value)||!Array.isArray(value.preferences))throw new Error('Unexpected preferences response');return value.preferences.map(preference);}
+export async function createPreference(key:PreferenceKey,category:PreferenceCategory,value:Preference['value']){const result=await request('/preferences','POST',{key,category,value});return preference(object(result)?result.preference:null);}
+export async function updatePreference(item:Preference,value:Preference['value']){const result=await request(`/preferences/${encodeURIComponent(item.id)}`,'PUT',{value,expectedRevision:item.revision});return preference(object(result)?result.preference:null);}
+export async function correctPreference(item:Preference,value:Preference['value'],note?:string){const result=await request(`/preferences/${encodeURIComponent(item.id)}/correct`,'POST',{value,expectedRevision:item.revision,...(note?.trim()?{note:note.trim()}:{})});return preference(object(result)?result.preference:null);}
+export async function archivePreference(item:Preference){const result=await request(`/preferences/${encodeURIComponent(item.id)}`,'DELETE',{expectedRevision:item.revision});return preference(object(result)?result.preference:null);}
+export async function reactivatePreference(item:Preference){const result=await request(`/preferences/${encodeURIComponent(item.id)}/reactivate`,'POST',{expectedRevision:item.revision});return preference(object(result)?result.preference:null);}
+export async function getPreferenceHistory(id:string){const result=await request(`/preferences/${encodeURIComponent(id)}/history`);if(!object(result)||!object(result.history)||!Array.isArray(result.history.versions)||!Array.isArray(result.history.corrections))throw new Error('Unexpected preference history');return{versions:result.history.versions.map(preference),corrections:result.history.corrections} as PreferenceHistory;}
+export async function suggestPreference(statement:string){const result=await request('/preference-suggestions','POST',{statement});if(!object(result)||!object(result.suggestion)||typeof result.suggestion.reason!=='string')throw new Error('Unexpected suggestion');return result.suggestion as PreferenceSuggestion;}
+export async function acceptPreferenceSuggestion(item:PreferenceSuggestion){const result=await request('/preference-suggestions/accept','POST',{suggestion:{key:item.key,category:item.category,value:item.value}});return preference(object(result)?result.preference:null);}

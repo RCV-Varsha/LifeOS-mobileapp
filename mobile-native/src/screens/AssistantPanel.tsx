@@ -1,0 +1,20 @@
+import {useRef,type ReactNode} from 'react';
+import { ActivityIndicator,Pressable,StyleSheet,Text,TextInput,View } from 'react-native';
+import type { AssistantAnswer } from '../../../backend/src/workspace/contracts';
+import ActionButton from '../components/ActionButton';
+import Disclosure from '../components/Disclosure';
+import MarkdownText from '../components/MarkdownText';
+import { colors } from '../ui/theme';
+
+type Props={query:string;onChange:(value:string)=>void;busy:boolean;answer:AssistantAnswer|null;onSend:()=>void;proposal:ReactNode;onNavigate:(area:'search'|'memory'|'actions')=>void};
+const suggestions=[{title:'Choose my next step',detail:'Find a useful place to start',prompt:'Based on my tasks and goals, what should I focus on next? Explain why.'},{title:'Make a task manageable',detail:'Break work into smaller steps',prompt:'Help me break down a task into smaller steps. Ask me which task first.'},{title:'Connect my notes',detail:'Turn saved ideas into direction',prompt:'Summarize the useful themes in my saved notes and suggest a next step.'}];
+export default function AssistantPanel({query,onChange,busy,answer,onSend,proposal,onNavigate}:Props){
+  const composer=useRef<TextInput>(null);
+  return <View style={s.page}>
+    {!answer?<Text style={s.subtitle}>Ask a question or get help with your next task.</Text>:<View style={s.reply}><Text style={s.replyLabel}>LIFEOS RESPONSE</Text><MarkdownText>{answer.answer}</MarkdownText>{answer.sources.length?<Disclosure title={`Sources · ${answer.sources.length}`}>{answer.sources.map(source=><View key={source.id} style={s.source}><Text style={s.suggestionTitle}>{source.title}</Text><Text style={s.detail}>{source.reason}</Text><Text style={s.detail}>{source.excerpt}</Text></View>)}</Disclosure>:null}{proposal}</View>}
+    <View style={s.composer}><TextInput ref={composer} accessibilityLabel="Message LifeOS" placeholder="What would you like help with?" placeholderTextColor={colors.muted} multiline value={query} onChangeText={onChange} style={s.input}/><View style={s.sendRow}><Text style={s.hint}>Review suggested changes before applying.</Text><ActionButton title={busy?'Thinking…':'Send ↑'} variant="primary" disabled={busy||!query.trim()} onPress={onSend}/></View></View>
+    {!answer?<View style={{gap:8}}><Text style={s.detail}>Try a prompt</Text><View style={s.suggestions}>{suggestions.map((item,index)=><Pressable key={item.title} accessibilityRole="button" disabled={busy} onPress={()=>{onChange(item.prompt);composer.current?.focus();}} style={({pressed})=>[s.suggestion,pressed&&{backgroundColor:colors.greenSoft}]}><Text style={s.suggestionTitle}>{['Choose my next task','Break down a task','Connect my notes'][index]}</Text></Pressable>)}</View></View>:null}
+    {busy?<View accessibilityLiveRegion="polite" style={s.thinking}><ActivityIndicator color={colors.green}/><Text style={s.detail}>Working on your request…</Text></View>:null}
+  </View>;
+}
+const s=StyleSheet.create({page:{gap:20},subtitle:{fontSize:15,lineHeight:23,color:colors.muted,maxWidth:480},suggestions:{flexDirection:'row',flexWrap:'wrap',gap:8},suggestion:{justifyContent:'center',paddingHorizontal:14,paddingVertical:10,borderRadius:20,borderWidth:1,borderColor:colors.line,backgroundColor:colors.paperRaised,minHeight:44},suggestionTitle:{fontSize:13,lineHeight:20,fontWeight:'600',color:colors.ink},detail:{fontSize:12,lineHeight:19,color:colors.muted},composer:{borderWidth:1,borderColor:colors.green,borderRadius:20,backgroundColor:colors.paperRaised,padding:16,gap:14},input:{fontSize:16,lineHeight:24,color:colors.ink,minHeight:104,maxHeight:180,textAlignVertical:'top'},sendRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},hint:{flex:1,fontSize:11,lineHeight:17,color:colors.muted},thinking:{flexDirection:'row',alignItems:'center',gap:10},reply:{gap:16},replyLabel:{fontSize:11,fontWeight:'700',letterSpacing:1.5,color:colors.green},source:{padding:12,borderRadius:12,backgroundColor:colors.greenSoft,gap:6}});

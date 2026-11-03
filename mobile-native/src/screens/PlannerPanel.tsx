@@ -1,0 +1,52 @@
+import {useEffect,useRef,useState} from 'react';
+import {ActivityIndicator,Pressable,StyleSheet,Text,TextInput,View} from 'react-native';
+import {api} from '../services/apiFetch';
+import {normalizeNewPlannerWindow} from '../services/taskDeadline';
+import {calendarDayKey,type CalendarEntry} from '../services/calendarView';
+import type {Proposal} from '../../../backend/src/workspace/contracts';
+import ActionButton from '../components/ActionButton';
+import PlannerCalendarButton from './PlannerCalendarButton';
+import ActionReviewCard from './ActionReviewCard';
+import {colors,input} from '../ui/theme';
+import {getProfile,type PersonalProfile} from '../services/profile';
+
+export default function PlannerPanel(){
+  const [day,setDay]=useState(()=>new Date()),[mode,setMode]=useState<'plan'|'event'|null>(null);
+  const [start,setStart]=useState('09:00'),[end,setEnd]=useState('17:00'),[title,setTitle]=useState('');
+  const [profile,setProfile]=useState<PersonalProfile|null>(null);
+  const timeEdited=useRef(false);
+  useEffect(()=>{let active=true;getProfile().then(result=>{if(active){setProfile(result.profile);if(!timeEdited.current&&result.profile.start){setStart(result.profile.start);setEnd(result.profile.end);}}}).catch(()=>{});return()=>{active=false;};},[]);
+  const [events,setEvents]=useState<CalendarEntry[]>([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(''),[loadError,setLoadError]=useState(''),[notice,setNotice]=useState(''),[proposal,setProposal]=useState<Proposal|null>(null),[revision,setRevision]=useState(0);
+  const key=calendarDayKey(day),dayLabel=day.toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'});
+  useEffect(()=>{
+    let active=true;setLoading(true);setLoadError('');setEvents([]);
+    const first=new Date(day.getFullYear(),day.getMonth(),day.getDate()),last=new Date(day.getFullYear(),day.getMonth(),day.getDate()+1);
+    void api<{items:CalendarEntry[]}>(`/calendar?start=${encodeURIComponent(first.toISOString())}&end=${encodeURIComponent(last.toISOString())}`).then(result=>{if(active)setEvents(result.items);}).catch(reason=>{if(active)setLoadError(reason instanceof Error?reason.message:'Could not load this day.');}).finally(()=>{if(active)setLoading(false);});
+    return()=>{active=false;};
+  },[key,revision]);
+  function chooseDay(date:Date){setDay(date);setError('');setNotice('');setProposal(null);}
+  function window(){return normalizeNewPlannerWindow(`${key} ${start}`,`${key} ${end}`);}
+  let invalid='';try{window();}catch{invalid='Use HH:mm times, with the end after the start. Choose today or a later date.';}
+  async function submit(){setBusy(true);setError('');setNotice('');try{
+    const range=window();
+    if(mode==='event'){await api('/calendar','POST',{title:title.trim(),...range});setTitle('');setMode(null);setRevision(value=>value+1);setNotice('Event added to your schedule.');}
+    else {const result=await api<{proposal:Proposal|null;evaluation:{availableMinutes:number;allocatedMinutes:number;skipped:unknown[]}}>('/planner/proposals','POST',range);setProposal(result.proposal);setNotice(result.proposal?`${result.evaluation.allocatedMinutes} minutes planned. Review the proposed times below before adding them.`:`No tasks could be scheduled in this time window. ${result.evaluation.availableMinutes} minutes available. Try another window or check your pending tasks.`);}
+  }catch(reason){setError(reason instanceof Error?reason.message:'Could not save. Please try again.');}finally{setBusy(false);}}
+  async function decide(decision:'apply'|'reject'|'undo'){if(!proposal)return;setBusy(true);setError('');try{const result=await api<{item:Proposal}>(`/ai/actions/${proposal.id}/${decision}`,'POST',{confirmed:true});setProposal(result.item);setRevision(value=>value+1);setNotice(decision==='apply'?'Schedule added. Your agenda is updated.':decision==='reject'?'Suggestion dismissed.':'Schedule changes undone.');}catch(reason){setError(reason instanceof Error?reason.message:'Could not update schedule.');}finally{setBusy(false);}}
+  function eventTime(value:string){const date=new Date(value);return date.toLocaleString(undefined,{...(calendarDayKey(date)!==key?{day:'numeric' as const,month:'short' as const}:{}),hour:'numeric',minute:'2-digit',hour12:true});}
+  return <View style={s.page}>
+    <View style={s.dayHeader}><View style={{flex:1,gap:4}}><Text style={s.eyebrow}>YOUR DAY</Text><Text style={s.day}>{dayLabel}</Text></View><PlannerCalendarButton start={`${key} 09:00`} end={`${key} 17:00`} disabled={busy} onError={setError} onSelect={chooseDay} title="Choose date"/></View>
+    <View style={s.row}>{[0,1].map(offset=>{const date=new Date();date.setDate(date.getDate()+offset);const selected=calendarDayKey(date)===key;return <Pressable key={offset} accessibilityRole="button" accessibilityState={{selected,disabled:busy}} disabled={busy} onPress={()=>chooseDay(date)} style={[s.chip,selected&&s.chosen]}><Text style={[s.chipText,selected&&{color:colors.onInk}]}>{offset?'Tomorrow':'Today'}</Text></Pressable>;})}<Text style={s.local}>Times shown in your local time</Text></View>
+    {profile&&(profile.start||profile.sessionMinutes)?<Text style={s.body}>{profile.name?`${profile.name}, your`:'Your'} planning defaults{profile.start?`: ${profile.start}–${profile.end}`:''}{profile.sessionMinutes?` · up to ${profile.sessionMinutes} minutes per suggestion`:''}. Edit your hours below or update your profile in Menu.</Text>:null}
+    <View style={s.agenda}><View style={s.between}><Text style={s.section}>Schedule</Text><ActionButton title="Refresh" disabled={loading||busy} onPress={()=>setRevision(value=>value+1)}/></View>
+      {loading?<ActivityIndicator color={colors.green}/>:loadError?<><Text accessibilityRole="alert" style={s.error}>{loadError}</Text><ActionButton title="Retry" onPress={()=>setRevision(value=>value+1)}/></>:events.length?events.map(event=><View key={event.id} style={s.event}><View style={s.dot}/><View style={{flex:1,gap:4}}><Text style={s.eventTime}>{eventTime(event.starts_at)} – {eventTime(event.ends_at)}</Text><Text style={s.eventTitle}>{event.title}</Text></View></View>):<View style={s.empty}><Text style={s.eventTitle}>Your day is open</Text><Text style={s.body}>Plan your pending tasks or add an event below.</Text></View>}
+    </View>
+    <View style={s.row}><ActionButton title="Plan my tasks" variant={mode==='plan'?'primary':'secondary'} disabled={busy} onPress={()=>{setMode('plan');setError('');}}/><ActionButton title="＋ Add an event" variant={mode==='event'?'primary':'secondary'} disabled={busy} onPress={()=>{setMode('event');setError('');}}/></View>
+    {mode?<View style={s.form}><View style={s.between}><Text style={s.section}>{mode==='plan'?'When are you free?':'Add an event'}</Text><ActionButton title="Close" disabled={busy} onPress={()=>setMode(null)}/></View><Text style={s.body}>{mode==='plan'?'Choose your available hours. LifeOS fits pending tasks around your saved events.':'Give your event a name and time. It will be added to this day.'}</Text><Text style={s.selectedDate}>{dayLabel}</Text>
+      {mode==='event'?<View style={{gap:6}}><Text style={s.label}>Event name</Text><TextInput accessibilityLabel="Event name" placeholder="For example, Java class" value={title} editable={!busy} onChangeText={setTitle} style={input}/></View>:null}
+      <View style={s.row}><View style={s.timeField}><Text style={s.label}>From</Text><TextInput accessibilityLabel="Start time in 24-hour format" placeholder="09:00" value={start} editable={!busy} onChangeText={value=>{timeEdited.current=true;setStart(value);}} maxLength={5} style={input}/></View><View style={s.timeField}><Text style={s.label}>Until</Text><TextInput accessibilityLabel="End time in 24-hour format" placeholder="17:00" value={end} editable={!busy} onChangeText={value=>{timeEdited.current=true;setEnd(value);}} maxLength={5} style={input}/></View></View><Text style={s.local}>24-hour time · for example, 14:30 means 2:30 PM</Text>{invalid?<Text accessibilityRole="alert" style={s.error}>{invalid}</Text>:null}<ActionButton title={busy?'Working…':mode==='plan'?'Preview my schedule':'Save event'} variant="primary" disabled={busy||Boolean(invalid)||(mode==='event'&&!title.trim())} onPress={()=>void submit()}/>{mode==='plan'?<Text style={s.local}>Nothing is added until you review and apply the suggestion.</Text>:null}</View>:null}
+    {error?<Text accessibilityRole="alert" style={s.error}>{error}</Text>:null}{notice?<Text accessibilityLiveRegion="polite" style={s.feedback}>{notice}</Text>:null}
+    {proposal?<ActionReviewCard proposal={proposal} busy={busy} onDecision={decision=>void decide(decision)}/>:null}
+  </View>;
+}
+const s=StyleSheet.create({page:{gap:18},dayHeader:{flexDirection:'row',alignItems:'center',gap:12},eyebrow:{fontSize:10,fontWeight:'700',letterSpacing:1.3,color:colors.green},day:{fontSize:21,lineHeight:28,fontWeight:'700',color:colors.ink},row:{flexDirection:'row',flexWrap:'wrap',alignItems:'center',gap:10},chip:{minHeight:44,paddingHorizontal:16,borderRadius:22,justifyContent:'center',backgroundColor:colors.stone},chosen:{backgroundColor:colors.green},chipText:{fontSize:13,fontWeight:'600',color:colors.ink},local:{fontSize:11,lineHeight:17,color:colors.muted,flexShrink:1},agenda:{backgroundColor:colors.paperRaised,borderRadius:20,padding:18,gap:12,borderWidth:1,borderColor:colors.line},between:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12},section:{fontSize:18,fontWeight:'700',color:colors.ink,flexShrink:1},empty:{paddingVertical:20,gap:6},body:{fontSize:14,lineHeight:22,color:colors.muted},event:{flexDirection:'row',gap:12,paddingVertical:12,borderTopWidth:1,borderTopColor:colors.line},dot:{height:8,width:8,borderRadius:4,backgroundColor:colors.green,marginTop:6},eventTime:{fontSize:12,fontWeight:'600',color:colors.green},eventTitle:{fontSize:15,lineHeight:23,fontWeight:'600',color:colors.ink},form:{backgroundColor:colors.paperRaised,borderRadius:20,padding:18,gap:14,borderWidth:1,borderColor:colors.line},selectedDate:{fontSize:14,fontWeight:'600',color:colors.green},label:{fontSize:12,fontWeight:'600',color:colors.muted},timeField:{flex:1,minWidth:100,gap:6},error:{fontSize:14,lineHeight:22,color:colors.danger},feedback:{fontSize:14,lineHeight:22,color:colors.green,padding:14,borderRadius:12,backgroundColor:colors.greenSoft}});
